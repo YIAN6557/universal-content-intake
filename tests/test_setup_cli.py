@@ -36,6 +36,20 @@ class CreatorTableTest(unittest.TestCase):
             cli.read_creator_table(self.write("Example\tUCaaaaaaaaaaaaaaaaaaaaaa\n"))
 
 
+class ClaspProjectTest(unittest.TestCase):
+    def test_reads_parent_id_written_by_clasp_2_and_3(self) -> None:
+        import json
+        from unittest import mock
+        from src.setup import cloud
+
+        with tempfile.TemporaryDirectory() as directory:
+            settings = Path(directory) / ".clasp.json"
+            with mock.patch.object(cloud, "CLASP_JSON", settings):
+                for parent in ("sheet-1", ["sheet-1"]):
+                    settings.write_text(json.dumps({"scriptId": "script-1", "parentId": parent}))
+                    self.assertEqual(cloud.project_ids(), {"script_id": "script-1", "spreadsheet_id": "sheet-1"})
+
+
 class SettingValueTest(unittest.TestCase):
     def test_parses_booleans_numbers_and_text(self) -> None:
         self.assertEqual([cli.parse_value(v) for v in ("true", "FALSE", "2", "0.04", "08:00", "PODCAST,AD")],

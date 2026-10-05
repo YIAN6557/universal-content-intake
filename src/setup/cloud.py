@@ -67,8 +67,11 @@ def project_ids() -> dict[str, str]:
     if not CLASP_JSON.is_file():
         return {}
     value = json.loads(CLASP_JSON.read_text(encoding="utf-8"))
-    parent = value.get("parentId") or []
-    return {"script_id": str(value.get("scriptId") or ""), "spreadsheet_id": str(parent[0]) if parent else ""}
+    parent = value.get("parentId") or ""
+    # clasp 2 wrote a list of parent IDs; clasp 3 writes a single string.
+    if isinstance(parent, list):
+        parent = parent[0] if parent else ""
+    return {"script_id": str(value.get("scriptId") or ""), "spreadsheet_id": str(parent)}
 
 
 def editor_url(script_id: str) -> str:
