@@ -1,0 +1,19 @@
+[project]
+name = "universal-content-intake"
+version = "0.2.0"
+description = "Watch YouTube creators, pick rising uploads, and deliver Chinese-subtitled clips with a publish sheet"
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+authors = [{name = "YIAN6557"}]
+dependencies = ["trafilatura>=2.2,<3", "certifi>=2025.1.31"]
+
+[project.urls]
+Repository = "https://github.com/YIAN6557/universal-content-intake"
+
+[tool.uci]
+test_command = "python3 -m unittest discover -s tests -v"
+
+# This workspace intentionally has no packaging backend. Invoke the CLI with
+# `python3 -m src.cli`; ARTICLE and WEBPAGE Markdown extraction use the
+# separately installed Trafilatura dependency declared above. WEBPAGE also
+# invokes an installed SingleFile CLI and the system Google Chrome executable.

@@ -1,0 +1,39 @@
+# Shipped defaults. Per-installation settings go in
+# ~/.config/universal-content-intake/config.yaml (created by bin/uci-setup),
+# which overrides any key below.
+schema_version: 1
+translation:
+  target_language: zh-Hans
+video:
+  target_resolution: 1080p
+  container: mp4
+  preferred_video_codec: h264
+  preferred_audio_codec: aac
+  download_retries: 3
+  fragment_retries: 3
+  extractor_retries: 2
+  # Retry sign-in-gated YouTube videos once with the local Chrome session (reads Chrome cookies).
+  allow_browser_cookies: false
+audio:
+  output_format: mp3
+image:
+  quality: highest_available
+media:
+  preserve_source_aspect_ratio: true
+output:
+  root: ~/Downloads/content-intake/
+  # Finished videos and their publish sheet are moved here as "<date> <title>.mp4" / ".md".
+  delivery_root: ~/Movies/Universal Content Intake/
+  file_conflict: deterministic_rename
+  archive_by_default: false
+# Written to ~/.config/universal-content-intake/config.yaml by bin/uci-setup.
+queue_api_url: ""
+queue_lease_seconds: 900
+queue_poll_seconds: 120
+queue_heartbeat_seconds: 300
+production_timezone: Asia/Shanghai
+rank2_start_cutoff: "12:00"
+processing_concurrency: 1
+worker_state_dir: ~/Library/Application Support/Universal Content Intake/worker
+execution:
+  unnecessary_user_interruption: false

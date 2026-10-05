@@ -1,0 +1,5 @@
+# Local evidence, models and built binaries are never distributed.
+prune evidence
+prune models
+prune tools
+global-exclude */bin/uci-*

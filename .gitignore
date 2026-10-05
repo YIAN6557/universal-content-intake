@@ -1,0 +1,17 @@
+# Local validation evidence (downloaded media); never published.
+/evidence/
+
+# Models are downloaded and SHA-256 checked by `bin/uci-setup build-tools` (see src/setup/environment.py).
+/models/*.bin
+
+# Local build artifacts and third-party binaries (rebuilt or downloaded per machine).
+__pycache__/
+.DS_Store
+/tools/document-runtime/bin/
+/tools/whisper.cpp/bin/
+/tools/whisper.cpp/lib/
+/apple-helper/*/bin/
+
+# Per-machine clasp project binding (created by bin/uci-setup cloud create).
+/.clasp.json
+/apple-helper/Translation/.build/

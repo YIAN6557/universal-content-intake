@@ -1,0 +1,9 @@
+schema_version: 1
+providers:
+  video: yt-dlp
+  audio: yt-dlp
+  image: gallery-dl
+  image_set: gallery-dl
+  article: trafilatura
+  webpage: SingleFile
+  document: curl / aria2 / rclone / gdown
