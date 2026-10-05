@@ -23,7 +23,9 @@ def normalize_language_code(value: str | None) -> str | None:
 
     if not value or not value.strip():
         return None
-    raw_parts = re.split(r"[-_]", value.strip())
+    # YouTube marks its speech-recognition track "<lang>-orig"; the language is <lang>.
+    value = re.sub(r"(?i)[-_]orig$", "", value.strip())
+    raw_parts = re.split(r"[-_]", value)
     if not raw_parts or not raw_parts[0].isalpha():
         return None
     parts = [raw_parts[0].lower()]
@@ -180,31 +182,32 @@ def exclude_machine_translated_tracks(
 ) -> tuple[tuple[SubtitleTrack, ...], tuple[SubtitleTrack, ...]]:
     """Drop provider machine translations of an automatic caption track.
 
-    YouTube lists its speech-recognition track as ``<lang>-orig`` and then offers
-    that same track machine-translated into every other language. Those
-    translations are not subtitle tracks of the video, and fetching all of them
-    (often 150+ requests) triggers HTTP 429. Manual tracks are always kept.
-    Catalogs without an ``-orig`` automatic track are returned unchanged.
+    YouTube lists its speech-recognition track as ``<lang>-orig`` and offers
+    that track machine-translated into every language, including a plain
+    ``<lang>`` copy. Translated tracks are not subtitle tracks of the video,
+    and YouTube rate-limits them hard (HTTP 429), so when an ``-orig`` track
+    exists every other automatic track is dropped. A video with YouTube
+    auto-dubbing has one ``-orig`` track per dubbed language; only the one in
+    the video's original language is kept when that language is known.
+    Manual tracks are always kept. Catalogs without an ``-orig`` automatic
+    track are returned unchanged.
     """
 
-    orig_bases = {
-        _base_language(track.language_code)
-        for track in tracks
-        if track.source == "automatic" and track.language_code.casefold().endswith("-orig")
-    }
-    if not orig_bases:
+    def is_orig(track: SubtitleTrack) -> bool:
+        return track.source == "automatic" and track.language_code.casefold().endswith("-orig")
+
+    origs = [track for track in tracks if is_orig(track)]
+    if not origs:
         return tuple(tracks), ()
-    allowed = set(orig_bases)
     normalized_original = normalize_language_code(original_language)
     if normalized_original:
-        allowed.add(_base_language(normalized_original))
+        matching = [track for track in origs if _base_language(track.language_code) == _base_language(normalized_original)]
+        if matching:
+            origs = matching
     kept: list[SubtitleTrack] = []
     excluded: list[SubtitleTrack] = []
     for track in tracks:
-        if track.source == "manual" or _base_language(track.language_code) in allowed:
-            kept.append(track)
-        else:
-            excluded.append(track)
+        (kept if track.source == "manual" or track in origs else excluded).append(track)
     return tuple(kept), tuple(excluded)
 
 
@@ -212,12 +215,12 @@ def select_primary_track(
     tracks: Sequence[SubtitleTrack],
     original_language: str | None,
 ) -> PrimaryTrackDecision:
-    """Choose a deterministic track; manual/automatic never change language priority."""
+    """Choose a deterministic track: language priority first, then manual over automatic."""
 
     if not tracks:
         raise ValueError("cannot select a primary track from an empty catalog")
     source = normalize_language_code(original_language)
-    ranked: list[tuple[tuple[int, str, str, str, str], SubtitleTrack]] = []
+    ranked: list[tuple[tuple[int, int, str, str, str], SubtitleTrack]] = []
     for track in tracks:
         language = normalize_language_code(track.language_code) or track.language_code
         if source and language == source:
@@ -226,7 +229,8 @@ def select_primary_track(
             rank, reason = 1, "original_language_family_match"
         else:
             rank, reason = 2, "provider_language_metadata"
-        key = (rank, language.casefold(), track.format.casefold(), track.track_identifier)
+        # Within the same language a human-made track beats speech recognition.
+        key = (rank, 0 if track.source == "manual" else 1, language.casefold(), track.format.casefold(), track.track_identifier)
         ranked.append((key, track))
     ranked.sort(key=lambda pair: pair[0])
     key, selected = ranked[0]
@@ -238,7 +242,7 @@ def select_primary_track(
     return PrimaryTrackDecision(
         selected,
         reason,
-        "language_code, format, track_identifier (source kind has equal priority)",
+        "language match, manual before automatic, language_code, format, track_identifier",
     )
 
 

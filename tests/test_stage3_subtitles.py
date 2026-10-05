@@ -36,7 +36,7 @@ class SubtitleNormalizationTests(unittest.TestCase):
         self.assertEqual(fallback.track.language_code, "en")
         self.assertEqual(fallback.reason, "original_language_family_match")
 
-    def test_manual_and_automatic_are_equal_priority_and_tie_break_is_order_independent(self) -> None:
+    def test_manual_beats_automatic_in_the_same_language_and_tie_break_is_order_independent(self) -> None:
         tracks = normalize_subtitle_tracks(
             {"en": [{"ext": "vtt", "format_id": "manual-vtt"}]},
             {"en": [{"ext": "vtt", "format_id": "auto-vtt"}]},
@@ -46,8 +46,14 @@ class SubtitleNormalizationTests(unittest.TestCase):
             shuffled = list(tracks)
             random.Random(seed).shuffle(shuffled)
             self.assertEqual(select_primary_track(shuffled, "en").track.track_identifier, expected)
-        # The source kind itself is not assigned a priority; lexical stable ID settles a tie.
-        self.assertEqual(expected, "automatic:en:auto-vtt")
+        # Language priority comes first; among equal languages a human-made track wins.
+        self.assertEqual(expected, "manual:en:manual-vtt")
+        french_manual = normalize_subtitle_tracks({"fr": [{"ext": "vtt", "format_id": "fr"}]}, {"en": [{"ext": "vtt", "format_id": "en"}]})
+        self.assertEqual(select_primary_track(french_manual, "en").track.language_code, "en")
+
+    def test_youtube_orig_suffix_is_not_part_of_the_language(self) -> None:
+        self.assertEqual(normalize_language_code("en-orig"), "en")
+        self.assertEqual(normalize_language_code("en-US-orig"), "en-US")
 
     def test_unknown_original_language_uses_provider_catalog_order_not_mapping_order(self) -> None:
         tracks = normalize_subtitle_tracks(

@@ -54,8 +54,18 @@ class MachineTranslationFilterTests(unittest.TestCase):
     def test_youtube_translations_are_excluded_and_manual_tracks_kept(self) -> None:
         tracks = [track("en", "automatic"), track("en-Orig", "automatic"), track("fr", "automatic"), track("de", "manual")]
         kept, excluded = exclude_machine_translated_tracks(tracks, "en")
-        self.assertEqual([t.language_code for t in kept], ["en", "en-Orig", "de"])
-        self.assertEqual([t.language_code for t in excluded], ["fr"])
+        # The plain automatic "en" is YouTube's translation of en-orig, which it rate-limits.
+        self.assertEqual([t.language_code for t in kept], ["en-Orig", "de"])
+        self.assertEqual([t.language_code for t in excluded], ["en", "fr"])
+
+    def test_auto_dubbed_video_keeps_only_the_original_language_recognition_track(self) -> None:
+        tracks = [track("ar-orig", "automatic"), track("en-orig", "automatic"), track("ja-orig", "automatic"),
+                  track("en", "automatic"), track("en", "manual")]
+        kept, _ = exclude_machine_translated_tracks(tracks, "en-US")
+        self.assertEqual([(t.language_code, t.source) for t in kept], [("en-orig", "automatic"), ("en", "manual")])
+        # Without a known original language every recognition track stays.
+        kept, _ = exclude_machine_translated_tracks(tracks, None)
+        self.assertEqual(len([t for t in kept if t.source == "automatic"]), 3)
 
     def test_catalog_without_orig_track_is_unchanged(self) -> None:
         tracks = [track("en", "automatic"), track("fr", "automatic")]
@@ -70,33 +80,34 @@ class SubtitleDownloadScopeTests(unittest.TestCase):
             job, _, _ = make_job(Path(directory), tracks=youtube_catalog(), language="en")
             provider = RecordingProvider()
             result = discover_and_select_subtitles(job, provider, Stage3Workspace(job), "a" * 64)
-        self.assertEqual(provider.languages, ["en", "en-Orig"])
-        self.assertEqual(result["primary_language_code"], "en")
+        self.assertEqual(provider.languages, ["en-Orig"])
+        self.assertEqual(result["primary_language_code"], "en-Orig")
         self.assertIn("zh-Hans", result["excluded_machine_translated_languages"])
-        self.assertEqual(len(result["excluded_machine_translated_languages"]), 11)
+        self.assertEqual(len(result["excluded_machine_translated_languages"]), 12)
 
     def test_secondary_network_failure_is_recorded_and_does_not_block(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            catalog = [auto_track("en"), {**auto_track("en-GB"), "source": "manual", "track_identifier": "manual:en-GB:vtt"}, auto_track("en-Orig")]
+            manual = lambda code: {**auto_track(code), "source": "manual", "track_identifier": f"manual:{code}:vtt"}
+            catalog = [auto_track("en-Orig"), manual("en-GB"), manual("en-AU")]
             job, _, _ = make_job(Path(directory), tracks=catalog, language="en")
             provider = RecordingProvider(fail_languages={"en-GB"})
             result = discover_and_select_subtitles(job, provider, Stage3Workspace(job), "b" * 64)
         statuses = {item["language_code"]: item["extraction_status"] for item in result["tracks"]}
         self.assertEqual(result["status"], "selected")
-        self.assertEqual(statuses["en"], "downloaded")
+        self.assertEqual(statuses["en-Orig"], "downloaded")
         self.assertEqual(statuses["en-GB"], "failed_non_primary")
         # after a network failure no further requests are sent
-        self.assertEqual(statuses["en-Orig"], "skipped_after_network_failure")
-        self.assertEqual(provider.languages, ["en", "en-GB"])
+        self.assertEqual(statuses["en-AU"], "skipped_after_network_failure")
+        self.assertEqual(provider.languages, ["en-Orig", "en-GB"])
 
     def test_primary_failure_still_raises_without_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             job, _, _ = make_job(Path(directory), tracks=youtube_catalog(), language="en")
-            provider = RecordingProvider(fail_languages={"en"})
+            provider = RecordingProvider(fail_languages={"en-Orig"})
             with self.assertRaises(SubtitleStageFailure) as caught:
                 discover_and_select_subtitles(job, provider, Stage3Workspace(job), "c" * 64)
         self.assertEqual(caught.exception.provider_kind, ProviderFailureKind.NETWORK)
-        self.assertEqual(provider.languages, ["en"])
+        self.assertEqual(provider.languages, ["en-Orig"])
 
 
 if __name__ == "__main__":
