@@ -37,6 +37,12 @@ is ready.
   https://script.google.com/home/usersettings.
 - **Leave macOS prompts to the user.** That includes installing the Xcode
   tools, translation language packs, folder access and notifications.
+- **Steer the user to the right editor.** Open it with
+  `bin/uci-setup cloud open` and have the user check that the project name at
+  the top left is "Universal Content Intake". Tell them never to click into or
+  type in the code area. If an editor run fails with a ReferenceError or
+  SyntaxError, the code was edited by accident: run
+  `bin/uci-setup cloud push` and have them run `uciSetup` again.
 - **Confirm the creator list before `bin/uci-setup creators apply`.** Show the
   table from `creators resolve`, including the advice column.
 - **Write the editorial brief from the user's own words.** Ask what they want

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import plistlib
+import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -124,12 +125,17 @@ def build_steps(ctx: Context) -> list[Step]:
     editor = cloud.editor_url(ids["script_id"]) if ids.get("script_id") else "（先完成第 5 步）"
     steps.append(Step("authorize", "在 Apps Script 编辑器里粘贴密钥、运行 uciSetup 并授权", HUMAN, authorized,
                       detail=ctx.inspect_error, guide=[
-        f"打开编辑器：{editor}",
+        f"打开编辑器：运行 bin/uci-setup cloud open（自动在浏览器里打开正确的项目），或手动打开 {editor}",
+        "⚠ 先核对：页面左上角的项目名必须是“Universal Content Intake”。如果你的账号里还有别的 Apps Script 项目，"
+        "不要在别的项目里操作，否则密钥和初始化都不会生效。",
+        "⚠ 全程不要点进中间的代码区域，也不要在里面打字，只用左侧菜单、顶部按钮和设置页的输入框。",
         "A. 粘贴密钥：先在终端运行 bin/uci-setup secret copy（密钥进剪贴板）→ 编辑器左侧齿轮“项目设置”→ 页面底部“脚本属性”"
         "→“添加脚本属性”，属性填 UCI_QUEUE_HMAC_SECRET，值处粘贴 → “保存脚本属性”。",
-        "B. 运行初始化：左侧“编辑器”→ 打开 setup.gs → 顶部函数下拉框选 uciSetup →“运行”→“审核权限”→ 选你的账号"
+        "B. 运行初始化：左侧“编辑器”→ 在文件列表里点 setup.gs → 顶部函数下拉框选 uciSetup →“运行”→“审核权限”→ 选你的账号"
         " →（出现“Google 尚未验证此应用”时）点“高级”→“转至 Universal Content Intake（不安全）”→“允许”。",
         "   执行日志出现“Universal Content Intake setup complete”即成功。uciSetup 可重复运行，不会重复建表。",
+        "   如果执行日志报 ReferenceError、SyntaxError 这类错误（例如“xx is not defined”），说明代码被误改了："
+        "运行 bin/uci-setup cloud push 恢复原样，再点一次“运行”。",
         "做完后重新运行 bin/uci-setup，向导会自动核对。"]))
     has_gemini = bool(properties.get("UCI_GEMINI_API_KEY"))
     judge_on = settings.get("semantic_judge_enabled") is True
@@ -140,7 +146,8 @@ def build_steps(ctx: Context) -> list[Step]:
         f"1.（{HUMAN}）打开 {GEMINI_KEY_URL} ，用同一个 Google 账号登录；第一次打开要先同意服务条款。",
         "2.（本人）点“Create API key”（创建 API 密钥），项目选默认的或新建一个，复制生成的 Key（以 AIza 开头）。",
         "   不需要绑定付款方式，免费额度对这套系统足够。",
-        "3.（本人）在 Apps Script 编辑器“项目设置 → 脚本属性”里添加 UCI_GEMINI_API_KEY，值粘贴这个 Key，保存。",
+        "3.（本人）运行 bin/uci-setup cloud open，在同一个“Universal Content Intake”项目的“项目设置 → 脚本属性”里"
+        "添加 UCI_GEMINI_API_KEY，值粘贴这个 Key，保存。",
         f"4.（{AGENT}）运行 bin/uci-setup config set semantic_judge_enabled=true semantic_gemini_model={GEMINI_MODEL}",
         "5.（本人，可选）让本机也用它写发布文案：在终端运行 security add-generic-password -s \"UCI Gemini API\" -a api-key -w ，按提示粘贴 Key。",
         "不想用的话可以跳过：bin/uci-setup skip gemini。但要知道跳过的代价：",
@@ -255,7 +262,11 @@ def cmd_cloud(args: argparse.Namespace) -> int:
         ids = cloud.project_ids()
         if not ids:
             raise cloud.SetupError("还没有云端项目，先运行 bin/uci-setup cloud create")
-        print(f"编辑器：{cloud.editor_url(ids['script_id'])}\n表格：{cloud.spreadsheet_url(ids['spreadsheet_id'])}")
+        editor = cloud.editor_url(ids["script_id"])
+        print(f"编辑器：{editor}\n表格：{cloud.spreadsheet_url(ids['spreadsheet_id'])}")
+        if not args.no_browser:
+            subprocess.run(["/usr/bin/open", editor], check=False)
+            print("已在浏览器里打开编辑器。核对左上角项目名是“Universal Content Intake”再操作。")
     return 0
 
 
@@ -530,6 +541,7 @@ def build_parser() -> argparse.ArgumentParser:
     cloud_parser = sub.add_parser("cloud", help="云端：create | push | deploy | open")
     cloud_parser.add_argument("action", choices=("create", "push", "deploy", "open"))
     cloud_parser.add_argument("--title", default=cloud.DEFAULT_TITLE)
+    cloud_parser.add_argument("--no-browser", action="store_true", help="open：只显示链接，不打开浏览器")
     secret = sub.add_parser("secret", help="共享密钥：create | copy")
     secret.add_argument("action", choices=("create", "copy"))
     secret.add_argument("--rotate", action="store_true")

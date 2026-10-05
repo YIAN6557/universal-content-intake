@@ -87,7 +87,11 @@ bin/uci-setup secret create
 
 ## 第 8 步：粘贴密钥、运行 uciSetup 并授权【本人】
 
-向导会给出编辑器地址（也可以运行 `bin/uci-setup cloud open` 查看）。
+运行 `bin/uci-setup cloud open`，它会在浏览器里直接打开正确的编辑器。开始之前请注意两点：
+
+> ⚠ **确认项目名**：页面左上角的项目名必须是 **Universal Content Intake**。如果你的账号里还有别的 Apps Script 项目，不要在别的项目里操作，否则密钥和初始化都不会生效。
+>
+> ⚠ **不要在代码区打字**：全程只用左侧菜单、顶部按钮和设置页的输入框，不要点进中间的代码区域。如果执行日志报 `ReferenceError`、`SyntaxError` 这类错误（例如"xx is not defined"），说明代码被误改了：运行 `bin/uci-setup cloud push` 恢复原样，再点一次"运行"。
 
 **A. 粘贴密钥**
 
@@ -120,7 +124,7 @@ bin/uci-setup secret create
 
 1. 打开 https://aistudio.google.com/apikey ，用同一个 Google 账号登录；第一次打开要先同意服务条款。
 2. 点"Create API key"（创建 API 密钥），项目选默认的或新建一个，复制生成的 Key（以 `AIza` 开头）。
-3. 在 Apps Script 编辑器"项目设置 → 脚本属性"里添加 `UCI_GEMINI_API_KEY`，值粘贴这个 Key，保存。
+3. 运行 `bin/uci-setup cloud open`，在同一个 **Universal Content Intake** 项目的"项目设置 → 脚本属性"里添加 `UCI_GEMINI_API_KEY`，值粘贴这个 Key，保存。
 4. 开启语义判断：
 
    ```bash
