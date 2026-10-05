@@ -71,7 +71,17 @@ def _executable(path: Path) -> bool:
 
 
 def clasp_path() -> Path:
-    return locate_tool("clasp", "UCI_CLASP_PATH")
+    return locate_tool("clasp", "UCI_CLASP_PATH", Path.home() / ".local" / "bin")
+
+
+def _npm_global_fix(package: str) -> str:
+    """npm -g needs a writable prefix; fall back to ~/.local when it is root-owned (no sudo needed)."""
+
+    result = _run(["npm", "config", "get", "prefix"], timeout=20)
+    prefix = Path(result.stdout.strip()) if result and result.returncode == 0 and result.stdout.strip() else None
+    if prefix is not None and os.access(prefix / "lib" / "node_modules", os.W_OK):
+        return f"npm install -g {package}"
+    return f"npm install -g --prefix ~/.local {package}"
 
 
 def sha256_of(path: Path) -> str:
@@ -134,7 +144,7 @@ def run_checks(*, deep: bool = True) -> list[Check]:
                         fix=_brew_or("node", "从 nodejs.org 下载安装 Node.js LTS")))
     clasp = clasp_path()
     checks.append(Check("clasp", "clasp（推送云端代码）", _executable(clasp), detail=str(clasp) if _executable(clasp) else "未找到",
-                        fix="npm install -g @google/clasp"))
+                        fix=_npm_global_fix("@google/clasp")))
     build = "bin/uci-setup build-tools"
     for model in MODELS:
         present = model.path.is_file()

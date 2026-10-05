@@ -49,7 +49,7 @@ def _clasp(args: list[str], *, cwd: Path = PROJECT_ROOT, timeout: float = 300) -
     try:
         result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False)
     except FileNotFoundError:
-        raise SetupError("找不到 clasp。请先运行：npm install -g @google/clasp") from None
+        raise SetupError("找不到 clasp。请先按 bin/uci-setup doctor 的提示安装 clasp") from None
     output = (result.stdout + "\n" + result.stderr).strip()
     if result.returncode != 0:
         if "Apps Script API" in output or "usersettings" in output:

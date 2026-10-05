@@ -27,7 +27,7 @@ bin/uci-setup doctor
 xcode-select --install                                  # 本人：在弹窗里点"安装"
 brew install ffmpeg deno node                           # 有 Homebrew 时
 python3 -m pip install --user -U certifi "yt-dlp[default]"
-npm install -g @google/clasp
+npm install -g @google/clasp                            # 提示权限不足时改用：npm install -g --prefix ~/.local @google/clasp
 ```
 
 后台程序的 PATH 很短，所以系统会主动去这些位置找工具：Homebrew、`pip --user`、`~/bin`、`~/.deno/bin`。工具装在别处时，可以用环境变量 `UCI_YTDLP_PATH`、`UCI_FFMPEG_PATH`、`UCI_FFPROBE_PATH`、`UCI_DENO_PATH`、`UCI_CLASP_PATH` 指定路径。
