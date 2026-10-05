@@ -99,6 +99,14 @@ def _clock(value: Any, tz: ZoneInfo) -> str:
     return parsed.astimezone(tz).strftime("%H:%M") if parsed else "-"
 
 
+def _installed_at(value: Any, tz: ZoneInfo) -> datetime | None:
+    try:
+        moment = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment.astimezone(tz) if moment.tzinfo else None
+
+
 def analyze_cloud(status: Mapping[str, Any], now: datetime, report: Report) -> None:
     config = status.get("config") or {}
     tz = ZoneInfo(str(config.get("production_timezone") or "Asia/Shanghai"))
@@ -137,10 +145,21 @@ def analyze_cloud(status: Mapping[str, Any], now: datetime, report: Report) -> N
             last_slot = None
         if last_slot is None or local_now - last_slot > timedelta(minutes=30):
             report.problems.append(f"发现时段未按时推进（最近：{slot or '无'}）")
+    # A run scheduled before the system was installed was never due.
+    started = _installed_at(config.get("monitor_started_at"), tz)
+
+    def due(at_minute: int) -> bool:
+        if started is None:
+            return True
+        start_day = started.strftime("%Y-%m-%d")
+        return start_day < day or (start_day == day and started.hour * 60 + started.minute <= at_minute)
+
+    if started is not None and started.strftime("%Y-%m-%d") == day:
+        report.add(f"  系统在 {started.strftime('%H:%M')} 安装；今天在这之前的环节不会补跑")
     # The markers keep only the latest day, so a later marker means this day ran.
-    if minute_of_day >= sweep_at + SCHEDULE_SLACK_MINUTES and sweep < day:
+    if minute_of_day >= sweep_at + SCHEDULE_SLACK_MINUTES and sweep < day and due(sweep_at):
         report.problems.append(f"{day} 的 {sweep_label} 补扫没有执行（补扫日：{sweep or '无'}）")
-    if minute_of_day >= selection_at + SCHEDULE_SLACK_MINUTES and selection < day:
+    if minute_of_day >= selection_at + SCHEDULE_SLACK_MINUTES and selection < day and due(selection_at):
         report.problems.append(f"{day} 的 {selection_label} 选片没有执行（选片日：{selection or '无'}）")
 
     videos = status.get("videos") or []

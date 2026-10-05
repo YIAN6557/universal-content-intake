@@ -55,6 +55,16 @@ class StatusReportTests(unittest.TestCase):
     def report(self, payload, now="2026-09-30T04:40:00+00:00", error=None):
         return build_report(payload, error, now=datetime.fromisoformat(now), day=None, log_path=self.log, workspace_root=self.workspace)
 
+    def test_runs_scheduled_before_installation_are_not_reported_missing(self) -> None:
+        fresh = {"production_timezone": "Asia/Shanghai", "daily_selection_enabled": True,
+                 "monitor_started_at": "2026-09-30T10:30:00Z"}  # installed 18:30 Beijing
+        report = self.report(status(config=fresh), now="2026-09-30T11:30:00+00:00")
+        self.assertFalse(any("没有执行" in problem for problem in report.problems), report.problems)
+        self.assertIn("系统在 18:30 安装", "\n".join(report.lines))
+        # Next day the same markers are a real problem.
+        report = self.report(status(day="2026-10-01", config=fresh), now="2026-10-01T05:00:00+00:00")
+        self.assertTrue(any("补扫没有执行" in problem for problem in report.problems))
+
     def test_a_normal_zero_download_batch_is_healthy_and_explains_the_thresholds(self) -> None:
         self.write_log("2026-09-30 12:38:00,000 INFO queue_id=- local_job_id=- operation=claim state=empty attempt=None error_code=-")
         report = self.report(status())

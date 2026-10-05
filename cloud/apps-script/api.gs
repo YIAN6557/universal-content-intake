@@ -142,7 +142,7 @@ const STAGE7_STATUS_CONFIG_KEYS_ = [
   'last_final_sweep_day', 'last_daily_selection_day', 'last_api_error_class', 'last_api_error_at',
   'discovery_window_start', 'discovery_window_end', 'final_sweep_time', 'daily_selection_time', 'rank2_start_cutoff',
   'cold_start_checkpoint_30_ratio', 'cold_start_checkpoint_60_ratio', 'cold_start_checkpoint_120_ratio',
-  'semantic_judge_enabled',
+  'semantic_judge_enabled', 'monitor_started_at',
 ];
 const STAGE7_STATUS_VIDEO_FIELDS_ = [
   'video_id', 'creator_name', 'title', 'published_at', 'discovered_at', 'lifecycle_state', 'broadcast_type',
