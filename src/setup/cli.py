@@ -26,6 +26,7 @@ MIRRORED_KEYS = {"production_timezone", "rank2_start_cutoff"}
 LOCAL_KEYS = {
     "delivery_root": ("output", "delivery_root"),
     "output_root": ("output", "root"),
+    "downloads_root": ("output", "downloads_root"),
     "target_resolution": ("video", "target_resolution"),
     "allow_browser_cookies": ("video", "allow_browser_cookies"),
 }

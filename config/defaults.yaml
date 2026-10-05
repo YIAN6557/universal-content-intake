@@ -24,6 +24,8 @@ output:
   root: ~/Downloads/content-intake/
   # Finished videos and their publish sheet are moved here as "<date> <title>.mp4" / ".md".
   delivery_root: ~/Movies/Universal Content Intake/
+  # bin/uci-get saves single downloads here.
+  downloads_root: ~/Downloads/
   file_conflict: deterministic_rename
   archive_by_default: false
 # Written to ~/.config/universal-content-intake/config.yaml by bin/uci-setup.
