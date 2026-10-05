@@ -550,6 +550,8 @@ COMMANDS = {
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Keep progress lines and errors in order when stdout is a pipe.
+    sys.stdout.reconfigure(line_buffering=True)
     args = build_parser().parse_args(argv)
     if args.command is None:
         args = build_parser().parse_args(["status", *(argv or [])])

@@ -15,8 +15,10 @@ from src.output.paths import OutputWorkspace
 from src.queue.worker import next_core_step
 from src.setup.environment import PROJECT_ROOT
 
-# "Me at the zoo": 19 seconds of English speech, the first YouTube upload.
-DEFAULT_SMOKE_URL = "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+# A 67-second NASA video (a U.S. government work, free of copyright) with
+# English speech and English subtitles. Avoid "Me at the zoo": YouTube labels it
+# German, so the trial would need the German translation pack.
+DEFAULT_SMOKE_URL = "https://www.youtube.com/watch?v=IwZVXmQdX1E"
 SMOKE_FOLDER = "uci-setup 试跑"
 MAX_STEPS = 6
 
@@ -34,7 +36,12 @@ def run_smoke(url: str, delivery_root: Path, *, log: Callable[[str], None] = pri
         job = Job.from_json(job_file.read_text(encoding="utf-8"))
         if job.error is not None:
             raise RuntimeError(f"{command[3]} 失败：{job.error.code.value} {job.error.message}")
-        if result.returncode not in (0,):
+        if result.returncode == 3:
+            stage3 = job.source_metadata.get("stage3") or {}
+            language = (stage3.get("subtitle_discovery") or {}).get("primary_language_code") or "未知"
+            raise RuntimeError(f"试跑在字幕阶段暂停：{stage3.get('status') or '未知原因'}（字幕语言 {language}）。"
+                               "缺翻译语言包时，到 系统设置 → 通用 → 语言与地区 → 翻译语言 下载对应语言。")
+        if result.returncode != 0:
             raise RuntimeError(f"{command[3]} 退出码 {result.returncode}：{result.stderr.strip()[-500:]}")
         step = next_core_step(job)
         if step is None:
