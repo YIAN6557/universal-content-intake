@@ -180,6 +180,22 @@ class FormatSelectionTests(unittest.TestCase):
         self.assertFalse(result.requires_merge)
         self.assertTrue(result.direct_compatible_mp4)
 
+    def test_auto_dubbed_audio_tracks_never_replace_the_original_soundtrack(self) -> None:
+        video = VideoFormat("270", "mp4", "avc1.640028", "none", 1920, 1080, 30, 2500, None)
+        dubbed = [VideoFormat(f"140-{index}", "m4a", "none", "mp4a.40.2", None, None, None, 129.6, None,
+                              language=language, language_preference=-1, format_note=f"{language}, medium")
+                  for index, language in enumerate(("ar", "de-DE", "ja"))]
+        original = VideoFormat("140-20", "m4a", "none", "mp4a.40.2", None, None, None, 129.5, None,
+                               language="en-US", language_preference=10, format_note="English (US) original (default), medium")
+        result = select_video_format([video, *dubbed, original], requested_resolution=1080)
+        self.assertEqual(result.selector, "270+140-20")
+        # A video without language metadata keeps the old behaviour.
+        plain = VideoFormat("140", "m4a", "none", "mp4a.40.2", None, None, None, 128, None)
+        self.assertEqual(select_video_format([video, plain], requested_resolution=1080).selector, "270+140")
+        parsed = VideoFormat.from_mapping({"format_id": "140-0", "ext": "m4a", "vcodec": "none", "acodec": "mp4a.40.2",
+                                           "language": "ar", "language_preference": -1, "format_note": "Arabic, medium"})
+        self.assertTrue(parsed.is_dubbed)
+
     def test_avc3_dash_codec_is_classified_as_h264_preference(self) -> None:
         video = VideoFormat("avc3", "mp4", "avc3.640028", None, 1920, 1080, 25, 2000, None)
         audio = VideoFormat("aac", "m4a", None, "mp4a.40.2", None, None, None, 128, None)

@@ -127,6 +127,15 @@ class VideoFormat:
     fps: float | None
     tbr: float | None
     filesize: int | None
+    language: str | None = None
+    # yt-dlp: 10 for the original audio track, -1 for YouTube auto-dubbed tracks.
+    language_preference: int | None = None
+    format_note: str | None = None
+
+    @property
+    def is_dubbed(self) -> bool:
+        note = (self.format_note or "").lower()
+        return "dubbed" in note or (self.language_preference is not None and self.language_preference < 0)
 
     @property
     def has_video(self) -> bool:
@@ -164,6 +173,9 @@ class VideoFormat:
             fps=_finite_float(value.get("fps")),
             tbr=_finite_float(value.get("tbr")),
             filesize=_positive_int(value.get("filesize") or value.get("filesize_approx")),
+            language=str(value.get("language")) if value.get("language") else None,
+            language_preference=value.get("language_preference") if isinstance(value.get("language_preference"), int) else None,
+            format_note=str(value.get("format_note")) if value.get("format_note") else None,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -413,6 +425,14 @@ def select_video_format(
     selected_resolution = max(int(item.quality_dimension) for item in videos)
     videos = [item for item in videos if item.quality_dimension == selected_resolution]
     audios = [item for item in formats if item.has_audio and not item.has_video]
+    # Videos with YouTube auto-dubbing list one audio track per language; keep
+    # the original soundtrack (highest language preference, never a dub).
+    originals = [item for item in audios if not item.is_dubbed]
+    if originals:
+        audios = originals
+    if any(item.language_preference is not None for item in audios):
+        top = max(item.language_preference if item.language_preference is not None else -100 for item in audios)
+        audios = [item for item in audios if (item.language_preference if item.language_preference is not None else -100) == top]
     combined = [item for item in videos if item.has_audio]
     source_has_audio = bool(audios or combined or any(item.has_audio for item in formats))
     candidates: list[tuple[tuple[float, ...], FormatSelection]] = []
