@@ -62,10 +62,29 @@ is ready.
   NEWS_ROUNDUP and AD; anything subtler belongs in the brief.
 - Where should finished videos go (`delivery_root`)?
 
+## Downloading a link for the user
+
+When the user asks to download something, use `bin/uci-get`. Pass their words
+along with the link: "download the PDF at …" or "下载这个视频 …". If the request
+names a type, that downloader is used without probing. A bare link is
+classified automatically.
+
+- Add `--type video|pdf|document|image|images|article|webpage` when the user
+  was explicit but their wording is unusual.
+- Add `--quality 720p|1440p|4k|highest` only on request; 1080p is the default.
+- Add `--zh` when they want Chinese subtitles burned into a video.
+- Add `--to <folder>` when they name a destination.
+- Use `--dry-run` to check what a link would be treated as before
+  downloading.
+
+Downloads need only setup steps 1–3. If a type fails for a missing tool, run
+`bin/uci-setup doctor` and follow its fix line.
+
 ## Operating afterwards
 
 | User asks | Do |
 |---|---|
+| Download a link | `bin/uci-get "<their request> <link>"` (see above) |
 | How is it running? | `bin/uci-status` (another day: `bin/uci-status --day 2026-10-05`) |
 | Add or remove creators | `bin/uci-setup creators resolve …` → confirm → `apply`; `enable`/`disable <channel id>` |
 | Change times or limits | `bin/uci-setup config show`, then `config set key=value …` |

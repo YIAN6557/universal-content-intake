@@ -135,14 +135,23 @@ def build_steps(ctx: Context) -> list[Step]:
     judge_on = settings.get("semantic_judge_enabled") is True
     skipped = store.is_confirmed(state, "skip-gemini")
     gemini_guide = [
-        f"1.（{HUMAN}）在 {GEMINI_KEY_URL} 创建 API Key（免费额度足够）。",
-        "2.（本人）在编辑器“项目设置 → 脚本属性”里添加 UCI_GEMINI_API_KEY，值粘贴这个 Key。",
-        f"3.（{AGENT}）运行 bin/uci-setup config set semantic_judge_enabled=true semantic_gemini_model={GEMINI_MODEL}",
-        "不需要的话：bin/uci-setup skip gemini（只用规则过滤，不做语义判断）。"]
+        "Gemini Key 免费，约 2 分钟就能申请好。Gemini 在 Google 的服务器上调用，不经过你本机的网络。",
+        "用它做两件事：一是按你写的内容方向判断每条视频合不合适（语义判断），二是写发布标题和文案。",
+        f"1.（{HUMAN}）打开 {GEMINI_KEY_URL} ，用同一个 Google 账号登录；第一次打开要先同意服务条款。",
+        "2.（本人）点“Create API key”（创建 API 密钥），项目选默认的或新建一个，复制生成的 Key（以 AIza 开头）。",
+        "   不需要绑定付款方式，免费额度对这套系统足够。",
+        "3.（本人）在 Apps Script 编辑器“项目设置 → 脚本属性”里添加 UCI_GEMINI_API_KEY，值粘贴这个 Key，保存。",
+        f"4.（{AGENT}）运行 bin/uci-setup config set semantic_judge_enabled=true semantic_gemini_model={GEMINI_MODEL}",
+        "5.（本人，可选）让本机也用它写发布文案：在终端运行 security add-generic-password -s \"UCI Gemini API\" -a api-key -w ，按提示粘贴 Key。",
+        "不想用的话可以跳过：bin/uci-setup skip gemini。但要知道跳过的代价：",
+        "  · 选片只剩时长、标题规则和热度，你写的内容方向不起作用，选出来的视频会更杂；",
+        "  · 发布标题只是原标题的直译，文案从字幕里摘句子，质量明显差一截。",
+    ]
     if has_gemini and not judge_on:
-        gemini_guide = [gemini_guide[2]]
-    steps.append(Step("gemini", "（可选）Gemini 语义判断", f"{HUMAN}申请 Key / {AGENT}开启", (has_gemini and judge_on) or skipped,
-                      optional=True, detail="已跳过" if skipped and not has_gemini else "", guide=gemini_guide))
+        gemini_guide = [line for line in gemini_guide if line.startswith("4.")]
+    steps.append(Step("gemini", "（可选，推荐）Gemini：语义判断与发布文案", f"{HUMAN}申请 Key / {AGENT}开启", (has_gemini and judge_on) or skipped,
+                      optional=True, detail="已跳过：选片只靠规则，发布文案为规则生成" if skipped and not has_gemini else "",
+                      guide=gemini_guide))
     enabled = [item for item in info.get("creators") or [] if item.get("enabled") is True]
     pending = state.get("creators_pending") or []
     steps.append(Step("creators", "第一批作者白名单", f"{HUMAN}提供名单 / {AGENT}解析写入", bool(enabled),
@@ -439,6 +448,9 @@ def cmd_confirm(args: argparse.Namespace) -> int:
 def cmd_skip(args: argparse.Namespace) -> int:
     store.confirm(f"skip-{args.step}")
     print(f"✓ 已跳过：{args.step}")
+    if args.step == "gemini":
+        print("  之后选片只靠时长、标题规则和热度，内容方向不起作用；发布标题和文案改用规则生成。")
+        print(f"  随时可以补上：按 bin/uci-setup 第 9 步的说明申请免费 Key（{GEMINI_KEY_URL}）。")
     return 0
 
 

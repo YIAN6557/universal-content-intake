@@ -15,6 +15,8 @@ bin/uci-setup
 
 ---
 
+> **只想用下载工具（`bin/uci-get`）？** 完成第 1–3 步就可以了，不需要 Google 账号；其余步骤是自动化流程才需要的。
+
 ## 第 1 步：本机环境【Agent，Xcode 工具需本人确认】
 
 ```bash
@@ -107,25 +109,38 @@ bin/uci-setup secret create
 - 签名校验没通过：密钥没粘贴，或粘贴的值与本机钥匙串里的不一致。
 - 云端返回了网页：通常是还没完成授权。
 
-## 第 9 步（可选）：Gemini 语义判断【本人申请 Key，Agent 开启】
+## 第 9 步（可选，推荐）：Gemini 语义判断与发布文案【本人申请 Key，Agent 开启】
 
-1. 在 https://aistudio.google.com/apikey 创建 API Key（免费额度足够）。
-2. 在编辑器"项目设置 → 脚本属性"里添加 `UCI_GEMINI_API_KEY`，值粘贴这个 Key。
-3. 开启语义判断：
+**Gemini Key 免费，约 2 分钟就能申请好**，不需要绑定付款方式，免费额度对这套系统足够。Gemini 在 Google 的服务器上调用，不经过你本机的网络。它用来做两件事：
+
+- **语义判断**：按你写的内容方向，判断每条起量的视频是否合适；
+- **发布文案**：为成片撰写中文标题、文案和话题标签。
+
+申请和接入：
+
+1. 打开 https://aistudio.google.com/apikey ，用同一个 Google 账号登录；第一次打开要先同意服务条款。
+2. 点"Create API key"（创建 API 密钥），项目选默认的或新建一个，复制生成的 Key（以 `AIza` 开头）。
+3. 在 Apps Script 编辑器"项目设置 → 脚本属性"里添加 `UCI_GEMINI_API_KEY`，值粘贴这个 Key，保存。
+4. 开启语义判断：
 
    ```bash
    bin/uci-setup config set semantic_judge_enabled=true semantic_gemini_model=gemini-3.5-flash-lite
    ```
 
-不需要的话，运行 `bin/uci-setup skip gemini`，只用规则过滤。
+5. （可选）让本机也用它写发布文案。在终端运行下面的命令，按提示粘贴 Key：
 
-如果想让大模型写发布标题和文案，把 Key 存进本机钥匙串（自己在终端运行，系统会提示你输入 Key）：
+   ```bash
+   security add-generic-password -s "UCI Gemini API" -a api-key -w
+   ```
 
-```bash
-security add-generic-password -s "UCI Gemini API" -a api-key -w
-```
+   也可以改用 Anthropic Key：服务名是 `UCI Anthropic API`，需要先安装 `anthropic` 包。
 
-也可以改用 Anthropic Key，服务名是 `UCI Anthropic API`，并且需要先安装 `anthropic` 包。两个都没有时，发布文案按规则生成。
+**不想用也可以跳过**（`bin/uci-setup skip gemini`），但要清楚跳过的代价：
+
+- 选片只剩时长、标题规则和播放热度，你写的内容方向不起作用，选出来的视频会更杂；
+- 发布标题只是原标题的直译，文案从字幕里摘句子，质量明显差一截。
+
+以后随时可以按上面的步骤补上。
 
 ## 第 10 步：第一批作者白名单【本人提供名单，Agent 解析写入】
 

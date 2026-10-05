@@ -2,45 +2,96 @@
 
 [中文说明](README.zh-CN.md)
 
-Universal Content Intake watches a whitelist of YouTube creators, picks the
-uploads that are taking off, and turns them into ready-to-post clips with
-burned-in Simplified Chinese subtitles plus a Chinese publish sheet (title,
-copy, hashtags, and every source fact). The publishing itself is left to you.
+Universal Content Intake is a content collection and organization toolkit for
+the Mac. It works on two levels:
 
-It runs in two halves:
+1. **An automated pipeline.** Name a set of YouTube creators and the system
+   watches them for new uploads and spots the ones gaining traction. It
+   downloads them, translates the subtitles and burns them in as Simplified
+   Chinese, then attaches the full video details and a ready-to-use publish
+   description.
+2. **A standalone downloader.** Give it one link and it downloads what is
+   behind it: videos, PDFs and other documents, images and galleries,
+   articles, or a complete web page.
 
-- **Cloud (Google Apps Script + a Google Sheet).** Every 10 minutes during your
-  discovery window it reads the creators' upload playlists, takes view
-  snapshots at T+30/60/120 minutes, and marks a video HOT when it beats that
-  creator's own baseline. It applies your content rules, and can also ask
-  Gemini for an editorial judgement. At selection time it queues the best one
-  or two videos.
-- **Your Mac (a LaunchAgent worker).** It claims queued videos and downloads
-  them at up to 1080p with yt-dlp. Subtitles come from YouTube or from local
-  Whisper speech recognition. They are translated on device with Apple
-  Translation and burned in with ffmpeg. The finished video and its publish
-  sheet are moved into your delivery folder.
+Use both, or only the downloader.
+
+## Level 1: the automated pipeline
 
 ```
- Creators sheet ──► Discovery (every 10 min) ──► Snapshots T+30/60/120 ──► HOT vs creator baseline
-                                                                              │
-                         content rules + optional Gemini editorial judge ◄────┘
-                                                                              │
- Delivery folder ◄── burn-in ◄── Apple Translation ◄── subtitles / Whisper ◄── Mac worker ◄── Queue (Web App, HMAC-signed)
+ Creators ─► periodic discovery ─► early view tracking ─► rules + optional AI editorial check ─► daily pick
+                                                                                                   │
+ Delivery folder ◄─ burn-in ◄─ on-device translation ◄─ subtitles / on-device speech recognition ◄─ Mac worker
 ```
+
+- **In the cloud (Google Apps Script + one Google Sheet).**
+  - During your discovery window it checks the creators every 10 minutes and
+    records views at 30, 60 and 120 minutes after publishing.
+  - It compares each video with that creator's own history to find the ones
+    taking off.
+  - It applies your length and title rules. With Gemini connected, it also
+    checks each video against your editorial direction.
+  - Once a day it picks one or two videos for the Mac.
+- **On your Mac (a background worker).**
+  - It downloads at **1080p by default**. 720p, 1440p, 4K or the best
+    available are configurable; low-resolution sources are never upscaled.
+  - It uses the video's own subtitles when they exist, or on-device Whisper
+    speech recognition when they don't.
+  - It translates on device with Apple Translation and burns the Chinese
+    subtitles into the picture.
+  - The finished video is delivered together with a publish sheet: title,
+    copy, hashtags, creator, original link and publish time.
+
+## Level 2: the downloader
+
+```bash
+bin/uci-get "download the PDF at https://example.com/report"
+bin/uci-get "下载这个视频 https://www.youtube.com/watch?v=…"
+bin/uci-get https://example.com/some-page        # just a link: the type is detected
+```
+
+- **Say what you want and it downloads exactly that.** Requests like "the
+  PDF at this link", "this video" or "save this page" pick the matching
+  downloader without probing. `--type
+  video|pdf|document|image|images|article|webpage` does the same.
+- **Give only a link and it decides.** It checks, in order:
+  - known platforms: video sites such as YouTube and Bilibili, Google Drive,
+    image sites;
+  - the file extension;
+  - what the server returns. HTML pages are then classified as an article or
+    a page to keep whole.
+- **Videos.** Any of the thousands of sites yt-dlp supports, 1080p by default
+  (`--quality` to change). `--zh` also translates and burns in Chinese
+  subtitles.
+- **Documents.** Direct links to PDF, Word, Excel, PowerPoint, archives and
+  more; Google Drive shares; configured rclone remotes.
+- **Images.** A single picture, or a whole album or gallery.
+- **Web pages.** Articles are extracted as Markdown. Whole pages are saved as
+  offline HTML, Markdown and PDF.
+
+Downloads land in your Downloads folder under their original title, next to a
+short description file. Multi-file results, such as galleries, get their own
+folder. `--to <folder>` saves them elsewhere.
 
 ## Requirements
 
-- macOS 15 or newer (Apple Translation, PDFKit, LaunchAgent). Apple silicon recommended.
-- Python 3.11+, Node.js (for `clasp`), Xcode Command Line Tools.
-- ffmpeg/ffprobe, yt-dlp, deno.
-- A Google account. **No YouTube API key is needed**: the cloud half uses the
-  Apps Script YouTube advanced service under your own Google authorization
-  (free quota 10,000 units/day; a typical setup uses a few thousand).
-- Optional: a Gemini API key (editorial judge), and an Anthropic or Gemini key
-  in the macOS Keychain for LLM-written publish titles and copy.
+- macOS 15 or newer; Apple silicon recommended.
+- Python 3.11+, Xcode Command Line Tools, ffmpeg, yt-dlp, deno.
+- **Downloader only.** Finishing the first three setup steps (environment,
+  models and tools, translation pack) is enough; no Google account is needed.
+  Some content types use extra tools: gallery-dl for images, SingleFile and
+  Chrome for whole pages, rclone for cloud drives. `bin/uci-setup doctor`
+  lists what is missing and how to install it.
+- **Automated pipeline.** Also a Google account and Node.js (for `clasp`).
+  **No YouTube API key is needed.** The cloud part uses your own Google
+  authorization, with a free quota of 10,000 units a day, of which a typical
+  setup uses one to two thousand.
+- **Recommended.** A free Gemini API key, which takes about two minutes to
+  create. It filters videos by your editorial direction and writes the publish
+  title and copy. Without it everything still runs, but the picks are less
+  focused and the copy is plainer.
 
-## Install
+## Install and set up
 
 ```bash
 git clone https://github.com/YIAN6557/universal-content-intake.git
@@ -48,53 +99,51 @@ cd universal-content-intake
 bin/uci-setup
 ```
 
-`bin/uci-setup` is a step-by-step wizard. Each run checks what is already done
-and prints the next step. It marks each step as something an agent (or the
-wizard itself) can do, or something only you can do, such as signing in to
-Google, granting permissions, or pasting a secret. Follow it until it reports
-that the system is ready. [SETUP.md](SETUP.md) walks through every step. If you
-use a coding agent such as Claude Code, point it at [SKILL.md](SKILL.md) and ask
-it to set the system up with you.
+`bin/uci-setup` is a step-by-step wizard. Each run checks your progress and
+says what to do next. It marks every step as something an agent can do, or
+something you do yourself, such as signing in to Google, approving access or
+pasting a secret. Follow it until it reports that the system is ready.
+[SETUP.md](SETUP.md) walks through every step. If you use a coding agent such
+as Claude Code, point it at [SKILL.md](SKILL.md) and it can guide you through
+setup.
 
 Day to day:
 
 ```bash
 bin/uci-status            # cloud health, today's batch, queue, local worker
-bin/uci-setup config show # schedule, limits, content rules
+bin/uci-setup config show # schedule, daily count, rules, editorial direction
+bin/uci-get <link>        # one-off download
 ```
 
 ## Configuration
 
 | Where | What |
 |---|---|
-| Google Sheet → `Config` (edit with `bin/uci-setup config set key=value`) | timezone, discovery window, final sweep, selection time, daily maximum, Rank 2 cutoff, view/like thresholds, `content_max_duration_minutes`, `content_title_filters`, Gemini judge and your editorial brief |
+| Google Sheet → `Config` (edit with `bin/uci-setup config set key=value`) | timezone, discovery window, final sweep, selection time, daily count, latest start time for the second pick, view thresholds, maximum length, title rules, Gemini check and your editorial direction |
 | Google Sheet → `Creators` (edit with `bin/uci-setup creators …`) | the creator whitelist |
-| `~/.config/universal-content-intake/config.yaml` | per-Mac settings: Queue API URL, delivery folder, work folder, quality cap, browser-cookie fallback (off by default) |
-| macOS Keychain | Queue API shared secret (`UCI Queue API HMAC`), optional `UCI Gemini API` / `UCI Anthropic API` keys for publish copy |
-| Apps Script → Script Properties | the same Queue API secret, optional `UCI_GEMINI_API_KEY` |
+| `~/.config/universal-content-intake/config.yaml` | per-Mac settings: cloud endpoint, delivery folder, downloads folder, work folder, video quality (1080p by default), Chrome sign-in fallback (off by default) |
+| macOS Keychain | the shared secret between Mac and cloud; optional Gemini / Anthropic keys for publish copy |
+| Apps Script → Script Properties | the same shared secret; optional `UCI_GEMINI_API_KEY` |
 
 Your creator list and editorial direction stay in your own Google Sheet and
-`~/.config`; nothing about them is stored in this repository.
+local config; none of it is stored in this repository.
 
 ## Privacy and security
 
-- The Mac and the Web App authenticate every request with an HMAC-SHA256
-  signature. The secret lives only in your Keychain and your Script
-  Properties. The wizard never prints it.
-- Downloads are anonymous. Reading Chrome's sign-in cookies for age- or
-  sign-in-gated videos is **off** unless you enable
-  `video.allow_browser_cookies`.
-- Transcription and translation run locally. The optional Gemini judge sends
-  video titles, descriptions and statistics to Google. The optional publish
-  writer sends the same plus translated subtitle excerpts to Anthropic or
-  Google.
+- Every request between the Mac and the cloud is signed with HMAC-SHA256. The
+  secret lives only in your Keychain and Script Properties, and the wizard
+  never displays it.
+- Downloads are anonymous. Chrome's sign-in state is used for sign-in-gated
+  videos only when you enable `video.allow_browser_cookies`.
+- Speech recognition and translation run on your Mac. The optional Gemini
+  check sends video titles, descriptions and statistics to Google. The
+  optional publish writer also sends translated subtitle excerpts.
 
 ## Responsible use
 
-This tool downloads and re-subtitles other people's videos. **You are
-responsible** for having the rights or permission to download, modify and
-republish any content, and for following YouTube's Terms of Service and the
-laws that apply to you. The authors provide the software as is and accept no
+Download, process and publish content only where you have the rights or
+permission to do so, and follow each platform's terms of service and the laws
+that apply to you. The software is provided as is, and its authors accept no
 liability for how it is used.
 
 ## Development

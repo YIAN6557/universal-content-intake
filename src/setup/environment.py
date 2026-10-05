@@ -166,7 +166,7 @@ def run_checks(*, deep: bool = True) -> list[Check]:
         ("gallery-dl", "gallery-dl（uci-get 下载图片/图集）", shutil.which("gallery-dl") or locate_tool("gallery-dl", "UCI_GALLERY_DL_PATH"), _pip("gallery-dl")),
         ("single-file", "SingleFile CLI（uci-get 整页保存网页）",
          os.environ.get("UCI_SINGLE_FILE_PATH") or shutil.which("single-file") or (DEFAULT_SINGLE_FILE_PATH if DEFAULT_SINGLE_FILE_PATH.is_file() else ""),
-         f'npm install --prefix "{DEFAULT_SINGLE_FILE_PATH.parents[2]}" single-file-cli'),
+         f'npm install --prefix "{DEFAULT_SINGLE_FILE_PATH.parents[2]}" single-file-cli@2.15.7'),
         ("chrome", "Google Chrome（uci-get 整页保存网页）", os.environ.get("UCI_CHROME_PATH") or "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
          "安装 Google Chrome"),
         ("aria2c", "aria2（uci-get 大文件断点续传）", shutil.which("aria2c") or "", _brew_or("aria2", "可选：用于大文件续传")),

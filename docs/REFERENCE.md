@@ -10,6 +10,7 @@
 | `src/output/` | Workspace containment, output paths, `info.md`, delivery to the delivery folder and the Chinese publish sheet |
 | `src/queue/` | Signed Queue API client, Keychain secret, LaunchAgent Worker, `uci-status`, weekly yt-dlp updater |
 | `src/setup/` | `uci-setup` first-run wizard |
+| `src/get_cli.py` | `uci-get`: one-link downloader (stated type, or detection by platform → extension → server response) |
 | `cloud/apps-script/` | Creator discovery, snapshots, baselines, HOT scoring, content filter, optional Gemini judge, daily selection, Queue sheet and the HMAC-authenticated Web App |
 | `apple-helper/` | Swift sources for the Apple Translation and PDFKit helpers (built by `uci-setup build-tools`) |
 
