@@ -124,6 +124,13 @@ test('uciSetup turns an empty bound spreadsheet into a working installation', ()
   assert.ok(creatorHeaders.includes('uploads_playlist_id') && creatorHeaders.includes('cold_baseline_status'));
   assert.equal(config(runtime).discovery_window_end, '08:00');
   assert.equal(config(runtime).daily_selection_enabled, false);
+  // A clock that Sheets converted to a time value is rewritten as text.
+  const configSheet = runtime.spreadsheet.getSheetByName('Config');
+  const sweepRow = configSheet.rows.findIndex((row) => row && row[0] === 'final_sweep_time');
+  configSheet.rows[sweepRow][1] = new Date(Date.UTC(1899, 11, 30, 8, 10));
+  runtime.context.uciSetup();
+  assert.equal(config(runtime).final_sweep_time, '08:10');
+  assert.equal(configSheet.formats[`${sweepRow + 1},2`], '@');
   // Idempotent: a second run keeps one trigger and adds no duplicate rows, and
   // does not undo a selection switch that verify already turned on.
   runtime.context.uciSetupWriteConfig_('daily_selection_enabled', true);

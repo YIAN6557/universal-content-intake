@@ -50,6 +50,7 @@ function uciSetup() {
   stage6SetupSheets();
   stage7SetupQueue_();
   stage6InstallMonitorTrigger();
+  uciSetupClocksAsText_();
   if (freshInstall) uciSetupWriteConfig_('daily_selection_enabled', false);
   const report = uciSetupInspect_();
   Logger.log('Universal Content Intake setup complete: ' + JSON.stringify({
@@ -62,6 +63,20 @@ function uciSetup() {
     Logger.log('Next: run `bin/uci-setup` on your Mac; it generates the shared secret and tells you where to paste it.');
   }
   return report;
+}
+
+// Sheets turns a seeded "08:00" into a time value. The scheduler reads either
+// form, but text is what people (and setup_inspect) should see, so rewrite any
+// clock that is not already text.
+function uciSetupClocksAsText_() {
+  const config = stage6ReadConfig_();
+  Object.keys(UCI_SETUP_EDITABLE_KEYS_).forEach(function (key) {
+    const value = config[key];
+    if (UCI_SETUP_EDITABLE_KEYS_[key] !== 'clock' || typeof value === 'string' || value === undefined || value === '') return;
+    const minutes = stage6ClockMinutes_(value, key);
+    const text = ('0' + Math.floor(minutes / 60)).slice(-2) + ':' + ('0' + (minutes % 60)).slice(-2);
+    uciSetupWriteConfig_(key, text);
+  });
 }
 
 function uciSetupInspect_() {
