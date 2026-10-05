@@ -23,10 +23,9 @@ from typing import Any, Callable
 from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 
 import certifi
-from lxml import html as lxml_html
 
 from src.core.job import ContentType, Job
-from src.providers.article import _is_login_wall, extract_trafilatura_markdown
+from src.providers.article import _is_login_wall, extract_trafilatura_markdown, parse_html
 from src.providers.base import (
     ContentProvider,
     ProducedArtifact,
@@ -779,7 +778,7 @@ class WebpageProvider(ContentProvider):
     def _validate_html(self, path: Path, source_url: str, identity: str) -> None:
         try:
             data = path.read_bytes()
-            tree = lxml_html.fromstring(data)
+            tree = parse_html(data)
         except (OSError, ValueError, TypeError) as error:
             raise ProviderFailure(ProviderFailureKind.FAILED, self.name, "SingleFile output is not readable HTML.", resume_token=identity) from error
         if _is_login_wall(data, source_url):
@@ -955,7 +954,7 @@ class WebpageProvider(ContentProvider):
     @staticmethod
     def _page_resource_facts(path: Path) -> dict[str, int]:
         try:
-            tree = lxml_html.fromstring(path.read_bytes())
+            tree = parse_html(path.read_bytes())
         except (OSError, ValueError, TypeError):
             return {"image_count": 0, "embedded_image_count": 0, "external_image_count": 0, "unresolved_image_count": 0}
         image_sources = [str(src).strip() for src in tree.xpath("//img/@src") if str(src).strip()]
@@ -973,7 +972,7 @@ class WebpageProvider(ContentProvider):
     def _saved_page_image_references(path: Path, source_url: str) -> list[dict[str, str]]:
         """Read image URLs SingleFile retained in its saved DOM, without fetching them."""
         try:
-            tree = lxml_html.fromstring(path.read_bytes())
+            tree = parse_html(path.read_bytes())
         except (OSError, ValueError, TypeError):
             return []
         containers = tree.xpath("//article[1]") or tree.xpath("//main[1]") or [tree]

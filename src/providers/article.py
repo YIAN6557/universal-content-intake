@@ -132,10 +132,38 @@ def _string_list(value: Any) -> list[str]:
     return result
 
 
+_META_CHARSET = re.compile(rb"""<meta[^>]+charset\s*=\s*["']?\s*([A-Za-z0-9_.:-]+)""", re.IGNORECASE)
+_XML_DECLARATION = re.compile(r"^\s*<\?xml[^>]*\?>")
+
+
+def decode_html(data: bytes) -> str:
+    """Decode HTML bytes by BOM, then the declared charset, then UTF-8.
+
+    lxml guesses the encoding itself when given bytes, and it guesses wrong
+    when non-ASCII text comes before the charset declaration (SingleFile puts
+    a "saved date" comment there), turning UTF-8 titles into Latin-1 mojibake.
+    """
+
+    if data.startswith(b"\xef\xbb\xbf"):
+        return data[3:].decode("utf-8", errors="replace")
+    match = _META_CHARSET.search(data[:65536])
+    encoding = match.group(1).decode("ascii", errors="ignore") if match else "utf-8"
+    try:
+        return data.decode(encoding, errors="replace")
+    except LookupError:
+        return data.decode("utf-8", errors="replace")
+
+
+def parse_html(data: bytes) -> Any:
+    """lxml HTML tree from bytes, decoded by ``decode_html``."""
+
+    return lxml_html.fromstring(_XML_DECLARATION.sub("", decode_html(data), count=1))
+
+
 def _html_metadata(html: bytes, final_url: str) -> dict[str, Any]:
     """Read only explicit page metadata that Trafilatura does not expose."""
     try:
-        tree = lxml_html.fromstring(html)
+        tree = parse_html(html)
     except (ValueError, TypeError):
         return {}
     values: dict[str, list[str]] = {}
