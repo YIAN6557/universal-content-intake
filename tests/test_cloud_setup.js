@@ -43,6 +43,10 @@ class MemorySheet {
       },
       setValue(value) { sheet.rows[row - 1] ||= []; sheet.rows[row - 1][column - 1] = value; },
       setNumberFormat(format) { sheet.formats[`${row},${column}`] = format; },
+      getDisplayValue() {
+        const value = sheet.rows[row - 1]?.[column - 1];
+        return value instanceof Date ? `${value.getUTCHours()}:${String(value.getUTCMinutes()).padStart(2, '0')}:00` : String(value ?? '');
+      },
     };
   }
   getDataRange() { return this.getRange(1, 1, Math.max(1, this.getLastRow()), Math.max(1, this.getLastColumn())); }
@@ -50,12 +54,13 @@ class MemorySheet {
 }
 
 function makeRuntime() {
-  const sheets = [new MemorySheet('Sheet1')];
+  const sheets = [new MemorySheet('工作表1')];
   const spreadsheet = {
     getId: () => 'sheet-id-1',
     getUrl: () => 'https://docs.google.com/spreadsheets/d/sheet-id-1/edit',
     getSpreadsheetTimeZone: () => 'Etc/UTC',
     getSheetByName: (name) => sheets.find((sheet) => sheet.name === name) || null,
+    getSheets: () => sheets.slice(),
     insertSheet: (name) => { const sheet = new MemorySheet(name); sheets.push(sheet); return sheet; },
   };
   const properties = {};
@@ -117,6 +122,11 @@ test('uciSetup turns an empty bound spreadsheet into a working installation', ()
   for (const name of ['Creators', 'Baseline', 'Videos', 'Snapshots', 'Config', 'Queue', 'QueueClaimRequests']) {
     assert.ok(runtime.spreadsheet.getSheetByName(name), name);
   }
+  // The localized default tab became Videos instead of being left behind.
+  assert.equal(runtime.spreadsheet.getSheetByName('工作表1'), null);
+  const configSheet = runtime.spreadsheet.getSheetByName('Config');
+  const rowOf = (key) => configSheet.rows.findIndex((row) => row && row[0] === key) + 1;
+  assert.equal(configSheet.formats[`${rowOf('discovery_window_end')},2`], '@');
   assert.equal(report.scheduler_triggers, 1);
   assert.equal(report.properties.UCI_QUEUE_HMAC_SECRET, false);
   assert.deepEqual(Array.from(report.creators), []);
@@ -125,7 +135,6 @@ test('uciSetup turns an empty bound spreadsheet into a working installation', ()
   assert.equal(config(runtime).discovery_window_end, '08:00');
   assert.equal(config(runtime).daily_selection_enabled, false);
   // A clock that Sheets converted to a time value is rewritten as text.
-  const configSheet = runtime.spreadsheet.getSheetByName('Config');
   const sweepRow = configSheet.rows.findIndex((row) => row && row[0] === 'final_sweep_time');
   configSheet.rows[sweepRow][1] = new Date(Date.UTC(1899, 11, 30, 8, 10));
   runtime.context.uciSetup();

@@ -65,17 +65,20 @@ function uciSetup() {
   return report;
 }
 
-// Sheets turns a seeded "08:00" into a time value. The scheduler reads either
-// form, but text is what people (and setup_inspect) should see, so rewrite any
-// clock that is not already text.
+// Installations seeded before clocks were written as text hold Sheets time
+// values, whose reading depends on the spreadsheet timezone. Rewrite them as
+// text from what the cell displays, which is what the user set.
 function uciSetupClocksAsText_() {
-  const config = stage6ReadConfig_();
-  Object.keys(UCI_SETUP_EDITABLE_KEYS_).forEach(function (key) {
-    const value = config[key];
-    if (UCI_SETUP_EDITABLE_KEYS_[key] !== 'clock' || typeof value === 'string' || value === undefined || value === '') return;
-    const minutes = stage6ClockMinutes_(value, key);
-    const text = ('0' + Math.floor(minutes / 60)).slice(-2) + ':' + ('0' + (minutes % 60)).slice(-2);
-    uciSetupWriteConfig_(key, text);
+  const table = stage6ReadTable_('Config');
+  const keyIndex = table.headers.indexOf('key');
+  const valueIndex = table.headers.indexOf('value');
+  table.rows.forEach(function (row, offset) {
+    const key = String(row[keyIndex]);
+    if (UCI_SETUP_EDITABLE_KEYS_[key] !== 'clock' || typeof row[valueIndex] === 'string') return;
+    const cell = table.sheet.getRange(offset + 2, valueIndex + 1);
+    const match = String(cell.getDisplayValue ? cell.getDisplayValue() : '').trim().match(/^(\d{1,2}):(\d{2})/);
+    if (!match) throw new Error('Config ' + key + ' is not a time of day; set it with bin/uci-setup config set.');
+    uciSetupWriteConfig_(key, ('0' + match[1]).slice(-2) + ':' + match[2]);
   });
 }
 

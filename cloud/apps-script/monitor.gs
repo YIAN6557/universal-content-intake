@@ -94,7 +94,11 @@ function stage6SetupSheets() {
 
   let videos = ss.getSheetByName('Videos');
   if (!videos) {
-    const blank = ss.getSheetByName('Sheet1');
+    // The default tab is "Sheet1", or its translation (e.g. 工作表1) on non-English accounts.
+    const sheets = typeof ss.getSheets === 'function' ? ss.getSheets() : [];
+    const blank = ss.getSheetByName('Sheet1') || sheets.filter(function (sheet) {
+      return ['Creators', 'Baseline', 'Videos', 'Snapshots', 'Config', 'Queue', 'QueueClaimRequests'].indexOf(sheet.getName()) < 0;
+    })[0] || null;
     if (blank && blank.getLastRow() === 0 && blank.getLastColumn() === 0) {
       blank.setName('Videos');
       videos = blank;
@@ -415,7 +419,18 @@ function stage6EnsureConfig_(sheet) {
   const missing = stage6ConfigDefaults_().filter(function (row) {
     return !Object.prototype.hasOwnProperty.call(existing, row[0]);
   });
-  if (missing.length) sheet.getRange(sheet.getLastRow() + 1, 1, missing.length, 3).setValues(missing);
+  if (missing.length) {
+    const firstRow = sheet.getLastRow() + 1;
+    // Keep clock defaults such as "08:00" as text; Sheets would otherwise store
+    // a time value whose reading depends on the spreadsheet timezone.
+    missing.forEach(function (row, offset) {
+      if (/^\d{2}:\d{2}$/.test(String(row[1]))) {
+        const cell = sheet.getRange(firstRow + offset, 2);
+        if (typeof cell.setNumberFormat === 'function') cell.setNumberFormat('@');
+      }
+    });
+    sheet.getRange(firstRow, 1, missing.length, 3).setValues(missing);
+  }
   stage6MigrateLegacyScheduleConfig_(sheet);
 }
 
