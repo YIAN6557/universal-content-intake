@@ -312,6 +312,14 @@ def cmd_creators(args: argparse.Namespace) -> int:
         print(f"✓ 新增 {len(result.get('added') or [])} 个，更新 {len(result.get('updated') or [])} 个。"
               "云端会在接下来的 10–20 分钟里为新频道建立播放量基线。")
         return 0
+    if args.action == "import":
+        if len(args.queries) != 1:
+            raise cloud.SetupError("用法：bin/uci-setup creators import 名单.tsv（列：creator_name, channel_id, enabled, trusted_creator, notes）")
+        rows = read_creator_table(Path(args.queries[0]).expanduser())
+        result = cloud.creators_upsert(rows)
+        print(f"✓ 导入 {len(rows)} 个频道（新增 {len(result.get('added') or [])}，更新 {len(result.get('updated') or [])}，"
+              f"其中启用 {sum(1 for row in rows if row['enabled'])}）。")
+        return 0
     if args.action in {"enable", "disable"}:
         current = {item.get("channel_id"): item for item in cloud.inspect().get("creators") or []}
         rows = []
@@ -329,6 +337,31 @@ def cmd_creators(args: argparse.Namespace) -> int:
         print(f" {mark} {item.get('creator_name')}  {item.get('channel_id')}  {item.get('notes') or ''}"
               f"  基线：{item.get('cold_baseline_status') or '待建立'}")
     return 0
+
+
+def read_creator_table(path: Path) -> list[dict[str, Any]]:
+    """Read a tab-separated creator list (header row required), e.g. one exported from another installation."""
+
+    lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if not lines:
+        raise cloud.SetupError(f"{path} 是空的")
+    headers = [name.strip() for name in lines[0].split("\t")]
+    if "channel_id" not in headers or "creator_name" not in headers:
+        raise cloud.SetupError("名单第一行必须是表头，至少包含 creator_name 和 channel_id（用 Tab 分隔）")
+    truthy = {"true", "yes", "1", "是"}
+    rows = []
+    for line in lines[1:]:
+        values = dict(zip(headers, (cell.strip() for cell in line.split("\t"))))
+        if not creator_tools.CHANNEL_ID.match(values.get("channel_id", "")):
+            raise cloud.SetupError(f"频道 ID 不对：{values.get('channel_id')!r}（{values.get('creator_name')}）")
+        rows.append({
+            "creator_name": values["creator_name"],
+            "channel_id": values["channel_id"],
+            "enabled": values.get("enabled", "true").lower() in truthy,
+            "trusted_creator": values.get("trusted_creator", "false").lower() in truthy,
+            "notes": values.get("notes", ""),
+        })
+    return rows
 
 
 def parse_value(text: str) -> Any:
@@ -487,8 +520,8 @@ def build_parser() -> argparse.ArgumentParser:
     secret = sub.add_parser("secret", help="共享密钥：create | copy")
     secret.add_argument("action", choices=("create", "copy"))
     secret.add_argument("--rotate", action="store_true")
-    creators = sub.add_parser("creators", help="白名单：resolve | drop | apply | list | enable | disable")
-    creators.add_argument("action", choices=("resolve", "drop", "apply", "list", "enable", "disable"))
+    creators = sub.add_parser("creators", help="白名单：resolve | drop | apply | import | list | enable | disable")
+    creators.add_argument("action", choices=("resolve", "drop", "apply", "import", "list", "enable", "disable"))
     creators.add_argument("queries", nargs="*", help="@handle、频道链接或频道 ID")
     config = sub.add_parser("config", help="设置：show | set key=value … | brief --file")
     config.add_argument("action", choices=("show", "set", "brief"))
