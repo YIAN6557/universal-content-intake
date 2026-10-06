@@ -74,7 +74,6 @@ def _offer_subtitle_tools(prefs: preferences.Preferences, *, interactive: bool, 
 
 def _set_monitoring(enabled: bool, previously: bool | None, *, out: Callable[[str], None]) -> None:
     from src.queue.client import QueueApiError
-    from src.queue.status_cli import WORKER_LABEL
     from src.setup import cloud, launchagent, store
 
     configured = bool(str(store.read_user_config().get("queue_api_url") or "").strip()) and cloud.secret_exists()
@@ -97,7 +96,7 @@ def _set_monitoring(enabled: bool, previously: bool | None, *, out: Callable[[st
             out("✓ 云端已暂停：不再发现、记录和选片，不消耗 YouTube 配额；作者名单和设置都保留。")
         except QueueApiError as error:
             out(f"⚠ 云端没能暂停（{error.code}）。稍后重试：bin/uci settings --monitoring off")
-    if launchagent.is_loaded(WORKER_LABEL) or launchagent.plist_path(WORKER_LABEL).is_file():
+    if launchagent.installed_here():
         launchagent.uninstall()
         out("✓ 本机后台程序已停止。")
     preferences.save(monitoring=False)

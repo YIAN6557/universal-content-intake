@@ -58,7 +58,27 @@ def is_loaded(label: str) -> bool:
     return _launchctl("print", f"gui/{os.getuid()}/{label}").returncode == 0
 
 
+def owner(label: str = WORKER_LABEL) -> Path | None:
+    """The project directory an installed agent runs from, or None when it is not installed."""
+
+    try:
+        definition = plistlib.loads(plist_path(label).read_bytes())
+    except (OSError, plistlib.InvalidFileException, ValueError):
+        return None
+    directory = definition.get("WorkingDirectory")
+    return Path(str(directory)).resolve() if directory else None
+
+
+def installed_here(label: str = WORKER_LABEL) -> bool:
+    return owner(label) == PROJECT_ROOT.resolve()
+
+
 def install(python: str = sys.executable) -> list[Path]:
+    # The labels are per user, so another clone of this project may already own them.
+    for label in (WORKER_LABEL, UPDATE_LABEL):
+        other = owner(label)
+        if other is not None and other != PROJECT_ROOT.resolve():
+            raise RuntimeError(f"另一个安装目录（{other}）已经在用后台程序。先在那个目录运行 bin/uci settings --monitoring off，再在这里安装。")
     AGENTS_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     written = []
@@ -75,7 +95,11 @@ def install(python: str = sys.executable) -> list[Path]:
 
 
 def uninstall() -> None:
+    """Remove this installation's agents; agents installed from another directory are left alone."""
+
     for label in (WORKER_LABEL, UPDATE_LABEL):
+        if owner(label) not in (None, PROJECT_ROOT.resolve()):
+            continue
         if is_loaded(label):
             _launchctl("bootout", f"gui/{os.getuid()}/{label}")
         plist_path(label).unlink(missing_ok=True)

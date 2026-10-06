@@ -11,8 +11,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from src.setup import store
-from src.setup.launchagent import plist_path
-from src.queue.status_cli import WORKER_LABEL
+from src.setup import launchagent
 
 SUBTITLE_CHOICES = ("on", "off", "ask")
 SUBTITLE_LABELS = {"on": "启用", "off": "不启用", "ask": "每次询问"}
@@ -62,7 +61,7 @@ def monitoring_already_configured() -> bool:
 
     config = store.read_user_config()
     return bool(str(config.get("queue_api_url") or "").strip()) or bool(store.read_state().get("deployment_id")) \
-        or plist_path(WORKER_LABEL).is_file()
+        or launchagent.installed_here()
 
 
 MONITORING_QUESTION = """问题 1：是否启用自动监控？

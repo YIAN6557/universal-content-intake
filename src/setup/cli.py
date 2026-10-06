@@ -195,7 +195,7 @@ def build_steps(ctx: Context) -> list[Step]:
         " 标题过滤默认不开启，可选规则：PODCAST、KEYNOTE、QA、LIVESTREAM、REVIEW、FINANCE、TUTORIAL、GAMING、NEWS_ROUNDUP、AD，"
         "例如 content_title_filters=PODCAST,AD。",
         "3.（本人）确认后：bin/uci setup confirm preferences"]))
-    worker_ok = launchagent.is_loaded(WORKER_LABEL) and _agent_points_here()
+    worker_ok = launchagent.is_loaded(WORKER_LABEL) and launchagent.installed_here()
     steps.append(Step("worker", "安装本机后台程序（LaunchAgent）", AGENT, worker_ok,
                       guide=["运行 bin/uci setup launchagent install"]))
     steps.append(Step("permissions", "macOS 权限：通知、下载文件夹和交付文件夹访问", HUMAN,
@@ -207,15 +207,6 @@ def build_steps(ctx: Context) -> list[Step]:
     steps.append(Step("verify", "验收：连通性、配置自检、端到端试跑，然后开启每日选片", AGENT, verified,
                       guide=["运行 bin/uci setup verify（含一次约 1–3 分钟的本地试跑；跳过试跑加 --no-smoke）"]))
     return steps
-
-
-def _agent_points_here() -> bool:
-    path = launchagent.plist_path(WORKER_LABEL)
-    try:
-        definition = plistlib.loads(path.read_bytes())
-    except (OSError, plistlib.InvalidFileException):
-        return False
-    return Path(str(definition.get("WorkingDirectory"))).resolve() == environment.PROJECT_ROOT.resolve()
 
 
 def print_status(steps: list[Step], *, out: Callable[[str], None] = print,

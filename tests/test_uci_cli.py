@@ -20,7 +20,7 @@ class TempConfig(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         # Never mistake this Mac's own LaunchAgent for an existing installation.
-        plist = mock.patch.object(preferences, "plist_path", return_value=self.root / "missing.plist")
+        plist = mock.patch.object(preferences.launchagent, "installed_here", return_value=False)
         plist.start()
         self.addCleanup(plist.stop)
 
@@ -96,7 +96,7 @@ class SettingsTests(TempConfig):
 
         with mock.patch.object(cloud, "secret_exists", return_value=True), \
                 mock.patch.object(cloud, "set_monitoring") as paused, \
-                mock.patch.object(launchagent, "is_loaded", return_value=True), \
+                mock.patch.object(launchagent, "installed_here", return_value=True), \
                 mock.patch.object(launchagent, "uninstall") as stopped, redirect_stdout(io.StringIO()):
             uci_cli.cmd_settings(["--monitoring", "off"], interactive=False)
         paused.assert_called_once_with(False)
@@ -147,6 +147,45 @@ class WizardStepsTests(TempConfig):
         whisper = environment.Check("whisper", "whisper", False)
         self.assertTrue(setup_cli.relevant(whisper, preferences.Preferences(False, "off")))
         self.assertEqual(setup_cli.relevant(whisper, preferences.Preferences(False, "ask")), "")
+
+
+class LaunchAgentOwnershipTests(unittest.TestCase):
+    """The agents are per user; a second clone (or a test) must never touch another installation's worker."""
+
+    def setUp(self) -> None:
+        from src.setup import launchagent
+
+        self.launchagent = launchagent
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.agents = Path(directory.name)
+        patcher = mock.patch.object(launchagent, "AGENTS_DIR", self.agents)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def write_agent(self, label, working_directory):
+        import plistlib
+
+        (self.agents / f"{label}.plist").write_bytes(plistlib.dumps({"Label": label, "WorkingDirectory": str(working_directory)}))
+
+    def test_another_installations_agents_are_left_alone(self) -> None:
+        for label in (self.launchagent.WORKER_LABEL, self.launchagent.UPDATE_LABEL):
+            self.write_agent(label, self.agents / "elsewhere")
+        self.assertFalse(self.launchagent.installed_here())
+        with mock.patch.object(self.launchagent, "_launchctl") as launchctl:
+            self.launchagent.uninstall()
+            launchctl.assert_not_called()
+        self.assertTrue((self.agents / f"{self.launchagent.WORKER_LABEL}.plist").is_file())
+        with self.assertRaises(RuntimeError):
+            self.launchagent.install()
+
+    def test_this_installations_agents_are_recognized_and_removed(self) -> None:
+        for label in (self.launchagent.WORKER_LABEL, self.launchagent.UPDATE_LABEL):
+            self.write_agent(label, self.launchagent.PROJECT_ROOT)
+        self.assertTrue(self.launchagent.installed_here())
+        with mock.patch.object(self.launchagent, "_launchctl", return_value=mock.Mock(returncode=1)):
+            self.launchagent.uninstall()
+        self.assertFalse((self.agents / f"{self.launchagent.WORKER_LABEL}.plist").exists())
 
 
 if __name__ == "__main__":
