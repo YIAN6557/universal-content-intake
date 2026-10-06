@@ -1,5 +1,7 @@
 # Developer reference
 
+Two layers: the one-link downloader (`bin/uci <link>`) is the product; automatic monitoring (cloud + LaunchAgent worker) is optional and switched by `features.monitoring` in the user config. `features.video_subtitles` (`on`/`off`/`ask`) decides whether user downloads of videos get Chinese subtitles; monitored videos always do.
+
 ## Layout and ownership
 
 | Path | Owns |
@@ -8,11 +10,12 @@
 | `src/providers/` | Acquisition adapters (video, image, article, webpage, document). They return structured metadata, artifacts, resume tokens or failures and never change Job state |
 | `src/media/` | Subtitle discovery/selection, VAD + Whisper ASR, Apple Translation bridge, subtitle layout, burn-in, publish assist |
 | `src/output/` | Workspace containment, output paths, `info.md`, delivery to the delivery folder and the Chinese publish sheet |
-| `src/queue/` | Signed Queue API client, Keychain secret, LaunchAgent Worker, `uci-status`, weekly yt-dlp updater |
-| `src/setup/` | `uci-setup` first-run wizard |
-| `src/get_cli.py` | `uci-get`: one-link downloader (stated type, or detection by platform → extension → server response) |
+| `src/uci_cli.py` | `bin/uci`: the single entry point (download, `settings`, `setup`, `status`) and the first-run questions |
+| `src/queue/` | Signed Queue API client, Keychain secret, LaunchAgent Worker, `bin/uci status` report, weekly yt-dlp updater |
+| `src/setup/` | `bin/uci setup` wizard and `preferences.py` (the two first-run choices) |
+| `src/get_cli.py` | the one-link downloader behind `bin/uci <link>` (stated type, or detection by platform → extension → server response; subtitles per the saved choice or `--zh`/`--no-zh`) |
 | `cloud/apps-script/` | Creator discovery, snapshots, baselines, HOT scoring, content filter, optional Gemini judge, daily selection, Queue sheet and the HMAC-authenticated Web App |
-| `apple-helper/` | Swift sources for the Apple Translation and PDFKit helpers (built by `uci-setup build-tools`) |
+| `apple-helper/` | Swift sources for the Apple Translation and PDFKit helpers (built by `bin/uci setup build-tools`) |
 
 Settings come from `config/defaults.yaml`, overlaid by
 `~/.config/universal-content-intake/config.yaml` (`UCI_CONFIG` points elsewhere;
@@ -102,7 +105,7 @@ python3 -m src.cli image-run | article-run | webpage-run | document-run --url �
 | Variable | Purpose |
 |---|---|
 | `UCI_CONFIG` | user config path (`none` to disable) |
-| `UCI_PYTHON` | interpreter used by `bin/uci-setup` and `bin/uci-status` |
+| `UCI_PYTHON` | interpreter used by `bin/uci` |
 | `UCI_YTDLP_PATH`, `UCI_FFMPEG_PATH`, `UCI_FFPROBE_PATH`, `UCI_DENO_PATH`, `UCI_CLASP_PATH` | tool locations |
 | `UCI_WHISPER_SMALL_MODEL` | alternative Whisper model path |
 | `UCI_PUBLISH_WRITER=off` | force rule-based publish copy |

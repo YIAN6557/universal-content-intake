@@ -315,7 +315,7 @@ def build_report(status: Mapping[str, Any] | None, cloud_error: QueueApiError | 
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="uci-status", description="Universal Content Intake 运行状态（只读）")
+    parser = argparse.ArgumentParser(prog="uci status", description="Universal Content Intake 运行状态（只读）")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     parser.add_argument("--day", help="批次日期 YYYY-MM-DD，默认当天（生产时区）")
     parser.add_argument("--worker-log", type=Path, default=DEFAULT_WORKER_LOG)

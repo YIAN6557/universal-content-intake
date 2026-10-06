@@ -1,1 +1,1 @@
-"""First-run setup wizard (``bin/uci-setup``). See SETUP.md."""
+"""First-run setup wizard (``bin/uci setup``). See SETUP.md."""

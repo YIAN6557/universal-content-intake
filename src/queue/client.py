@@ -68,7 +68,7 @@ MONITOR_FIELDS = (
 )
 
 
-SETUP_ACTIONS = frozenset({"setup_inspect", "setup_config_set", "setup_creators_upsert"})
+SETUP_ACTIONS = frozenset({"setup_inspect", "setup_config_set", "setup_creators_upsert", "setup_monitoring"})
 
 
 @dataclass(frozen=True)
@@ -258,7 +258,7 @@ class QueueClient:
             raise QueueApiError("CONFIG_INVALID", "Queue API defaults could not be loaded.") from None
         api_url = defaults.get("queue_api_url")
         if not isinstance(api_url, str) or not api_url.strip():
-            raise QueueApiError("CONFIG_INVALID", "queue_api_url is not configured; run bin/uci-setup first.")
+            raise QueueApiError("CONFIG_INVALID", "queue_api_url is not configured; run bin/uci setup first.")
         return cls(
             api_url=api_url,
             secret_provider=KeychainSecretProvider() if secret_provider is None else secret_provider,
@@ -324,7 +324,7 @@ class QueueClient:
         return self._require_mapping(self._request(payload), "status")
 
     def setup(self, action: str, **fields: Any) -> Mapping[str, Any]:
-        """Signed first-run setup call used by bin/uci-setup (see cloud setup.gs)."""
+        """Signed first-run setup call used by bin/uci setup (see cloud setup.gs)."""
 
         if action not in SETUP_ACTIONS:
             raise QueueApiError("INVALID_REQUEST", f"Unknown setup action {action}.")

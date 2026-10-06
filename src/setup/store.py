@@ -77,7 +77,7 @@ def update_user_config(changes: Mapping[str, Any]) -> dict[str, Any]:
     """Merge nested ``changes`` into the user config and write it back."""
 
     merged = merge_config(read_user_config(), dict(changes))
-    header = "# Written by bin/uci-setup; overrides config/defaults.yaml for this Mac.\n"
+    header = "# Written by bin/uci setup; overrides config/defaults.yaml for this Mac.\n"
     _atomic_write(config_path(), header + dump_simple_yaml(merged))
     return merged
 

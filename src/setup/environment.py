@@ -1,4 +1,4 @@
-"""Local environment checks (``uci-setup doctor``) and tool builds (``uci-setup build-tools``)."""
+"""Local environment checks (``bin/uci setup doctor``) and tool builds (``bin/uci setup build-tools``)."""
 
 from __future__ import annotations
 
@@ -146,7 +146,7 @@ def run_checks(*, deep: bool = True) -> list[Check]:
     clasp = clasp_path()
     checks.append(Check("clasp", "clasp（推送云端代码）", _executable(clasp), detail=str(clasp) if _executable(clasp) else "未找到",
                         fix=_npm_global_fix("@google/clasp")))
-    build = "bin/uci-setup build-tools"
+    build = "bin/uci setup build-tools"
     for model in MODELS:
         present = model.path.is_file()
         ok = model_ok(model) if (deep and present) else present
@@ -161,17 +161,17 @@ def run_checks(*, deep: bool = True) -> list[Check]:
     checks.append(Check("pdfinfo-helper", "PDF 信息小工具（仅文档抓取用）", _executable(PDFINFO_DIR / "bin" / "uci-pdfinfo"),
                         fix=build, required=False))
     checks.append(Check("font", "字幕字体 Noto Sans CJK SC", FONT_FILE.is_file(), detail=str(FONT_FILE.name)))
-    # bin/uci-get only: each content type needs its own downloader. None of these is required.
+    # bin/uci only: each content type needs its own downloader. None of these is required.
     for key, label, found, fix in (
-        ("gallery-dl", "gallery-dl（uci-get 下载图片/图集）", shutil.which("gallery-dl") or locate_tool("gallery-dl", "UCI_GALLERY_DL_PATH"), _pip("gallery-dl")),
-        ("single-file", "SingleFile CLI（uci-get 整页保存网页）",
+        ("gallery-dl", "gallery-dl（下载图片/图集）", shutil.which("gallery-dl") or locate_tool("gallery-dl", "UCI_GALLERY_DL_PATH"), _pip("gallery-dl")),
+        ("single-file", "SingleFile CLI（整页保存网页）",
          os.environ.get("UCI_SINGLE_FILE_PATH") or shutil.which("single-file") or (DEFAULT_SINGLE_FILE_PATH if DEFAULT_SINGLE_FILE_PATH.is_file() else ""),
          f'npm install --prefix "{DEFAULT_SINGLE_FILE_PATH.parents[2]}" single-file-cli@2.15.7'),
-        ("chrome", "Google Chrome（uci-get 整页保存网页）", os.environ.get("UCI_CHROME_PATH") or "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        ("chrome", "Google Chrome（整页保存网页）", os.environ.get("UCI_CHROME_PATH") or "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
          "安装 Google Chrome"),
-        ("aria2c", "aria2（uci-get 大文件断点续传）", shutil.which("aria2c") or "", _brew_or("aria2", "可选：用于大文件续传")),
-        ("rclone", "rclone（uci-get 云盘链接）", shutil.which("rclone") or "", _brew_or("rclone", "可选：从 rclone.org 安装")),
-        ("gdown", "gdown（uci-get Google 云端硬盘备用）", shutil.which("gdown") or locate_tool("gdown", "UCI_GDOWN_PATH"), _pip("gdown")),
+        ("aria2c", "aria2（大文件断点续传）", shutil.which("aria2c") or "", _brew_or("aria2", "可选：用于大文件续传")),
+        ("rclone", "rclone（云盘链接）", shutil.which("rclone") or "", _brew_or("rclone", "可选：从 rclone.org 安装")),
+        ("gdown", "gdown（Google 云端硬盘备用）", shutil.which("gdown") or locate_tool("gdown", "UCI_GDOWN_PATH"), _pip("gdown")),
     ):
         path = Path(str(found)) if found else Path("")
         ok = bool(found) and path.is_file() and os.access(path, os.X_OK)

@@ -1,4 +1,3 @@
 #!/bin/sh
-# First-run setup wizard. Run without arguments to see progress and the next step. See SETUP.md.
-cd "$(dirname "$0")/.." || exit 2
-exec "${UCI_PYTHON:-python3}" -m src.setup.cli "$@"
+# Compatibility alias for `bin/uci setup`.
+exec "$(dirname "$0")/uci" setup "$@"

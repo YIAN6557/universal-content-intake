@@ -187,6 +187,23 @@ test('setup actions are signed: inspect, upsert creators and change settings', (
   assert.equal(values.content_title_filters, 'PODCAST,AD');
 });
 
+test('monitoring can be turned off and back on, and off means the scheduler does nothing', () => {
+  const runtime = makeRuntime();
+  runtime.context.uciSetup();
+  let calls = 0;
+  runtime.context.stage6ScheduleDecision_ = () => { calls += 1; return {}; };
+  const off = signed(runtime, 'setup_monitoring', { enabled: false });
+  assert.equal(off.ok, true, JSON.stringify(off));
+  assert.equal(config(runtime).monitor_status, 'PAUSED_BY_USER');
+  assert.equal(runtime.context.stage6RunScheduler().status, 'PAUSED_BY_USER');
+  assert.equal(calls, 0);
+  const on = signed(runtime, 'setup_monitoring', { enabled: true });
+  assert.equal(on.ok, true, JSON.stringify(on));
+  assert.equal(config(runtime).monitor_status, 'ACTIVE');
+  const bad = signed(runtime, 'setup_monitoring', { enabled: 'yes' });
+  assert.equal(bad.ok, false);
+});
+
 test('setup rejects unsafe values with a reason and leaves Config unchanged', () => {
   const runtime = makeRuntime();
   runtime.context.uciSetup();

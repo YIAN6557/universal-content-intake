@@ -71,7 +71,7 @@ const STAGE6_CONFIG_ROWS_ = [
   ['last_daily_selection_day', '', 'Internal idempotency marker for Daily Selection.'],
   ['warm_baseline_min_complete_watch', 10, 'Warm Baseline activates only after this many complete WATCH videos.'],
   ['monitor_started_at', '', 'Set once during setup; initial Discovery only accepts uploads newer than this timestamp.'],
-  ['monitor_status', 'ACTIVE', 'API_FAILED pauses the monitor until explicit resume.'],
+  ['monitor_status', 'ACTIVE', 'API_FAILED pauses the monitor until explicit resume; PAUSED_BY_USER means automatic monitoring is turned off.'],
   ['last_api_error_class', '', 'Sanitized error class only; raw exception and credentials are never stored.'],
   ['last_api_error_at', '', 'UTC time the monitor was paused.'],
   ['last_discovery_at', '', 'UTC completion time of the latest Discovery pass.'],
@@ -133,6 +133,8 @@ function stage6InstallMonitorTrigger() {
   Logger.log('Stage 6 scheduler trigger count=1; cadence=' + STAGE6_SCHEDULER_CADENCE_MINUTES_ + ' minutes.');
 }
 
+const STAGE6_PAUSED_BY_USER_ = 'PAUSED_BY_USER';
+
 function stage6ResumeMonitor() {
   stage6SetConfig_('monitor_status', 'ACTIVE');
   stage6SetConfig_('consecutive_api_failures', 0);
@@ -157,6 +159,10 @@ function stage6RunScheduler() {
     if (config.monitor_status === 'API_FAILED') {
       Logger.log('Stage 6 monitor is paused: API_FAILED.');
       return { status: 'API_FAILED', paused: true };
+    }
+    if (config.monitor_status === STAGE6_PAUSED_BY_USER_) {
+      // The owner turned automatic monitoring off (bin/uci settings); nothing runs until they turn it back on.
+      return { status: STAGE6_PAUSED_BY_USER_, paused: true };
     }
     try {
       const now = new Date();

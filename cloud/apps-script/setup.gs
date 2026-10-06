@@ -1,6 +1,6 @@
 // First-run setup (see SETUP.md). After `clasp push`, run uciSetup() once from
 // the Apps Script editor: it needs the owner's one-time authorization and is
-// idempotent. Everything after that is driven by `bin/uci-setup` through the
+// idempotent. Everything after that is driven by `bin/uci setup` through the
 // signed setup_* Web App actions below, so no further browser work is needed.
 
 const UCI_CREATOR_HEADERS_ = [
@@ -41,7 +41,7 @@ function uciSetup() {
   if (!ss) throw new Error('Run uciSetup() from the Apps Script project bound to your spreadsheet (clasp create --type sheets).');
   const properties = PropertiesService.getScriptProperties();
   properties.setProperty(STAGE6_SPREADSHEET_ID_PROPERTY_, ss.getId());
-  // A brand-new installation selects nothing until `bin/uci-setup verify` passes.
+  // A brand-new installation selects nothing until `bin/uci setup verify` passes.
   const freshInstall = !ss.getSheetByName('Config');
   const creators = ss.getSheetByName('Creators') || ss.insertSheet('Creators');
   const baseline = ss.getSheetByName('Baseline') || ss.insertSheet('Baseline');
@@ -60,7 +60,7 @@ function uciSetup() {
     properties: report.properties,
   }));
   if (!report.properties.UCI_QUEUE_HMAC_SECRET) {
-    Logger.log('Next: run `bin/uci-setup` on your Mac; it generates the shared secret and tells you where to paste it.');
+    Logger.log('Next: run `bin/uci setup` on your Mac; it generates the shared secret and tells you where to paste it.');
   }
   return report;
 }
@@ -77,7 +77,7 @@ function uciSetupClocksAsText_() {
     if (UCI_SETUP_EDITABLE_KEYS_[key] !== 'clock' || typeof row[valueIndex] === 'string') return;
     const cell = table.sheet.getRange(offset + 2, valueIndex + 1);
     const match = String(cell.getDisplayValue ? cell.getDisplayValue() : '').trim().match(/^(\d{1,2}):(\d{2})/);
-    if (!match) throw new Error('Config ' + key + ' is not a time of day; set it with bin/uci-setup config set.');
+    if (!match) throw new Error('Config ' + key + ' is not a time of day; set it with bin/uci setup config set.');
     uciSetupWriteConfig_(key, ('0' + match[1]).slice(-2) + ':' + match[2]);
   });
 }
@@ -222,13 +222,27 @@ function uciSetupWriteConfig_(key, value) {
   const rowOffset = table.rows.findIndex(function (row) { return String(row[keyIndex]) === key; });
   const textual = typeof value === 'string';
   if (rowOffset < 0) {
-    table.sheet.appendRow([key, textual ? "'" + value : value, 'Set by uci-setup.']);
+    table.sheet.appendRow([key, textual ? "'" + value : value, 'Set by bin/uci setup.']);
     return;
   }
   const range = table.sheet.getRange(rowOffset + 2, valueIndex + 1);
   // Keep clocks and names as text so Sheets does not turn "08:00" into a time value.
   if (textual && typeof range.setNumberFormat === 'function') range.setNumberFormat('@');
   range.setValue(value);
+}
+
+// Turn automatic monitoring on or off for the whole installation. Off pauses
+// discovery, snapshots and selection (no YouTube quota used); creators, history
+// and settings stay. On resumes from where it stopped.
+function uciSetupMonitoring_(request) {
+  const enabled = request && request.enabled;
+  if (enabled !== true && enabled !== false) throw stage7QueueError_('INVALID_REQUEST', 'enabled must be true or false.');
+  if (enabled) {
+    stage6ResumeMonitor();
+  } else {
+    stage6SetConfig_('monitor_status', STAGE6_PAUSED_BY_USER_);
+  }
+  return { monitoring: enabled, settings: uciSetupInspect_().settings };
 }
 
 function uciSetupCreatorsUpsert_(request) {

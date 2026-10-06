@@ -1,7 +1,7 @@
 [project]
 name = "universal-content-intake"
 version = "0.2.0"
-description = "Mac toolkit that monitors YouTube creators and automatically downloads, translates and subtitles their new videos, and a one-link downloader for videos, PDFs, images, articles and web pages."
+description = "One-link downloader for the Mac (videos, documents, images, articles, web pages), with optional automatic YouTube monitoring that translates and subtitles new videos."
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
 authors = [{name = "YIAN6557"}]

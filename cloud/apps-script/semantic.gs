@@ -20,7 +20,7 @@ const STAGE8_REASONS_ = [
 ];
 
 // Fallback editorial brief. Each installation sets its own direction in the
-// Config row `semantic_editorial_brief` during first-run setup (uci-setup brief).
+// Config row `semantic_editorial_brief` during first-run setup (bin/uci setup config brief).
 const STAGE8_DEFAULT_EDITORIAL_BRIEF_ = [
   'The selected videos are re-posted, with translated subtitles, for a general audience that likes technology explained through footage rather than talk.',
   'ACCEPT a video when it clearly shows something new and visual: a product, machine, robot, vehicle, experiment or event that happens on screen and can be summed up in one sentence.',

@@ -121,13 +121,15 @@ function stage7DispatchQueueApi_(request) {
       return stage7Fail_(request, stage7NowMillis_());
     case 'status':
       return stage7StatusReport_(request, stage7NowMillis_());
-    // First-run setup (setup.gs), driven by bin/uci-setup on the owner's Mac.
+    // First-run setup (setup.gs), driven by bin/uci setup / bin/uci settings on the owner's Mac.
     case 'setup_inspect':
       return uciSetupInspect_();
     case 'setup_config_set':
       return uciSetupConfigSet_(request);
     case 'setup_creators_upsert':
       return uciSetupCreatorsUpsert_(request);
+    case 'setup_monitoring':
+      return uciSetupMonitoring_(request);
     default:
       throw stage7QueueError_('INVALID_REQUEST', 'Unsupported Queue API action.');
   }

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Universal Content Intake. Run without arguments for help. See README.md.
+cd "$(dirname "$0")/.." || exit 2
+exec "${UCI_PYTHON:-python3}" -m src.uci_cli "$@"

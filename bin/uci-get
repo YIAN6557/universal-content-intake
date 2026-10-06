@@ -1,4 +1,3 @@
 #!/bin/sh
-# Download one link: bin/uci-get "下载这个PDF https://…"  or  bin/uci-get https://… (type detected).
-cd "$(dirname "$0")/.." || exit 2
-exec "${UCI_PYTHON:-python3}" -m src.get_cli "$@"
+# Compatibility alias for `bin/uci get`.
+exec "$(dirname "$0")/uci" get "$@"

@@ -1,4 +1,4 @@
-"""``bin/uci-get``: download one link with the right tool.
+"""``bin/uci``: download one link with the right tool.
 
 If the request says what to fetch ("下载这个链接里的 PDF", ``--type video``), that
 type is used as is and nothing is probed. Otherwise the type is decided from the
@@ -306,17 +306,58 @@ def downloads_root() -> Path:
     return Path(str(output.get("downloads_root") or "~/Downloads/")).expanduser()
 
 
-def main(argv: list[str] | None = None) -> int:
+def subtitle_tools_missing() -> list[str]:
+    from src.setup import environment
+
+    missing = [model.path.name for model in environment.MODELS if not model.path.is_file()]
+    if not (environment.WHISPER_CLI.is_file() and environment.VAD_CLI.is_file()):
+        missing.append("whisper.cpp")
+    if not environment.TRANSLATION_HELPER.is_file():
+        missing.append("Apple 翻译小工具")
+    return missing
+
+
+def decide_subtitles(
+    *,
+    zh: bool,
+    no_zh: bool,
+    preference: str | None,
+    interactive: bool,
+    read: Callable[[str], str] = input,
+) -> bool:
+    """Whether to translate and burn in Chinese subtitles for this video download."""
+
+    if zh and no_zh:
+        raise GetError("--zh 和 --no-zh 只能选一个。")
+    if zh or no_zh:
+        return zh
+    if preference == "on":
+        return True
+    if preference == "off":
+        return False
+    if not interactive:
+        raise GetError("当前设置为“每次询问”是否翻译压制中文字幕，但这里没法提问。"
+                       "请先问用户，再加 --zh（翻译并压制）或 --no-zh（只下载原视频）重新运行。")
+    while True:
+        reply = read("这个视频要翻译成简体中文并压制字幕吗？[y] 要  [n] 不要 > ").strip().lower()
+        if reply in {"y", "yes"}:
+            return True
+        if reply in {"n", "no"}:
+            return False
+
+
+def main(argv: list[str] | None = None, *, prog: str = "uci") -> int:
     sys.stdout.reconfigure(line_buffering=True)
     parser = argparse.ArgumentParser(
-        prog="uci-get",
+        prog=prog,
         description="下载一个链接。说明了类型（例如“下载这个链接里的PDF”或 --type pdf）就直接下载，否则自动判断。",
     )
     parser.add_argument("request", nargs="+", help="链接，可以附带一句说明，例如：下载这个PDF https://…")
     parser.add_argument("--type", choices=sorted(TYPE_NAMES), help="直接指定类型，不做检测")
     parser.add_argument("--quality", choices=("720p", "1080p", "1440p", "2160p", "2k", "4k", "highest"),
                         help="视频画质上限，默认 1080p（不会放大）")
-    parser.add_argument("--zh", action="store_true", help="视频：翻译成简体中文并把字幕压制进画面")
+    parser.add_argument("--zh", action="store_true", help="视频：这次翻译成简体中文并压制字幕（不管设置是什么）")
+    parser.add_argument("--no-zh", action="store_true", help="视频：这次只下载原视频（不管设置是什么）")
     parser.add_argument("--to", type=Path, help="保存到这个文件夹（默认：output.downloads_root，即“下载”文件夹）")
     parser.add_argument("--dry-run", action="store_true", help="只显示会用哪种方式下载，不下载")
     args = parser.parse_args(argv)
@@ -330,11 +371,21 @@ def main(argv: list[str] | None = None) -> int:
             decision = detect(url)
         how = "按你的说明，不做检测" if decision.declared else f"自动判断：{decision.reason}"
         print(f"类型：{LABELS[decision.content_type]}（{how}）")
+        chinese = False
+        if decision.content_type is ContentType.VIDEO:
+            from src.setup import preferences
+
+            chinese = decide_subtitles(zh=args.zh, no_zh=args.no_zh, preference=preferences.load().subtitles,
+                                       interactive=sys.stdin.isatty())
+            print("字幕：翻译成简体中文并压制" if chinese else "字幕：只下载原视频，不加字幕")
+            if chinese and subtitle_tools_missing():
+                raise GetError("翻译压制需要的语音识别模型和翻译工具还没装（" + "、".join(subtitle_tools_missing())
+                               + "）。先运行 bin/uci setup build-tools，或这次加 --no-zh 只下载原视频。")
+        elif args.zh or args.no_zh:
+            print("提示：--zh / --no-zh 只对视频有效，已忽略。")
         if args.dry_run:
             return 0
-        if args.zh and decision.content_type is not ContentType.VIDEO:
-            print("提示：--zh 只对视频有效，已忽略。")
-        files = download(url, decision.content_type, quality=args.quality, chinese_subtitles=args.zh)
+        files = download(url, decision.content_type, quality=args.quality, chinese_subtitles=chinese)
         files = deliver(files, (args.to or downloads_root()).expanduser())
         print("✓ 下载完成：")
         for path in files:

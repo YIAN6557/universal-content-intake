@@ -49,7 +49,7 @@ def _clasp(args: list[str], *, cwd: Path = PROJECT_ROOT, timeout: float = 300) -
     try:
         result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False)
     except FileNotFoundError:
-        raise SetupError("找不到 clasp。请先按 bin/uci-setup doctor 的提示安装 clasp") from None
+        raise SetupError("找不到 clasp。请先按 bin/uci setup doctor 的提示安装 clasp") from None
     output = (result.stdout + "\n" + result.stderr).strip()
     if result.returncode != 0:
         if "Apps Script API" in output or "usersettings" in output:
@@ -107,7 +107,7 @@ def create_project(title: str = DEFAULT_TITLE) -> dict[str, str]:
 
 def push() -> str:
     if not CLASP_JSON.is_file():
-        raise SetupError("还没有云端项目，先运行：bin/uci-setup cloud create")
+        raise SetupError("还没有云端项目，先运行：bin/uci setup cloud create")
     _clasp(["push", "--force"])
     digest = cloud_digest()
     store.update_state(pushed_digest=digest)
@@ -158,7 +158,7 @@ def copy_secret_to_clipboard() -> None:
     try:
         value = KeychainSecretProvider(service=HMAC_SERVICE, account=HMAC_ACCOUNT).get_secret()
     except SecretProviderError:
-        raise SetupError("钥匙串里没有共享密钥，先运行：bin/uci-setup secret create") from None
+        raise SetupError("钥匙串里没有共享密钥，先运行：bin/uci setup secret create") from None
     subprocess.run(["/usr/bin/pbcopy"], input=value, text=True, check=True, timeout=10)
 
 
@@ -178,3 +178,9 @@ def config_set(values: Mapping[str, Any]) -> Mapping[str, Any]:
 
 def creators_upsert(creators: list[Mapping[str, Any]]) -> Mapping[str, Any]:
     return client().setup("setup_creators_upsert", creators=[dict(item) for item in creators])
+
+
+def set_monitoring(enabled: bool) -> Mapping[str, Any]:
+    """Pause (off) or resume (on) the cloud scheduler; creators, history and settings stay."""
+
+    return client().setup("setup_monitoring", enabled=bool(enabled))

@@ -1,4 +1,3 @@
 #!/bin/sh
-# Read-only UCI health report (cloud status API + local Worker). See src/queue/status_cli.py.
-cd "$(dirname "$0")/.." || exit 2
-exec "${UCI_PYTHON:-python3}" -m src.queue.status_cli "$@"
+# Compatibility alias for `bin/uci status`.
+exec "$(dirname "$0")/uci" status "$@"
