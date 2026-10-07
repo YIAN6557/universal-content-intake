@@ -63,6 +63,19 @@ npm install -g @google/clasp                            # 自动监控需要；�
 
 后台程序的 PATH 很短，所以系统会主动去这些位置找工具：Homebrew、`pip --user`、`~/bin`、`~/.deno/bin`。工具装在别处时，可以用环境变量 `UCI_YTDLP_PATH`、`UCI_FFMPEG_PATH`、`UCI_FFPROBE_PATH`、`UCI_DENO_PATH`、`UCI_CLASP_PATH` 指定路径。
 
+## 下载引擎的定期维护（不启用自动监控时）【Agent】
+
+```bash
+bin/uci setup launchagent install
+```
+
+装两个后台定时任务（不装自动监控的处理程序）：
+
+- `local.universal-content-intake.ytdlp-update`：每周自动更新 yt-dlp，更新后真实试一次，失败就退回旧版本。
+- `local.universal-content-intake.engine-check`：每两周检查 gallery-dl、gdown、trafilatura、SingleFile、rclone、aria2、deno 和 whisper.cpp 在 GitHub 上有没有新版本。有的话发系统通知，**只提醒，不自动安装**。
+
+想马上检查一次：`bin/uci engines`，会列出每个引擎的本机版本、最新版本和更新命令。上一次检查的结果也会显示在 `bin/uci status` 里。
+
 ## 验收（不启用自动监控时）【Agent】
 
 ```bash
@@ -253,10 +266,13 @@ bin/uci setup confirm preferences
 bin/uci setup launchagent install
 ```
 
-安装两个 LaunchAgent，都使用当前运行向导的 Python：
+安装三个 LaunchAgent，都使用当前运行向导的 Python：
 
 - `local.universal-content-intake.worker`：常驻的处理程序。
 - `local.universal-content-intake.ytdlp-update`：每周自动更新 yt-dlp。
+- `local.universal-content-intake.engine-check`：每两周检查其他下载引擎有没有新版本，只发通知，不安装。
+
+关闭自动监控时只停掉处理程序，后两个定时任务保留。
 
 日志在 `~/Library/Logs/Universal Content Intake/`。卸载：`bin/uci setup launchagent uninstall`。
 

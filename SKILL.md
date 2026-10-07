@@ -126,6 +126,7 @@ user's two choices need.
 | Download a link | `bin/uci "<their request> <link>"` (see above) |
 | Change the two choices | ask them, then `bin/uci settings --monitoring … --subtitles …` |
 | How is monitoring running? | `bin/uci status` (another day: `bin/uci status --day 2026-10-05`) |
+| Are the download engines up to date? | `bin/uci engines` checks GitHub now and prints each update command. It never installs: show the user what is newer and run an update only when they ask. yt-dlp updates itself weekly. |
 | Add or remove creators | `bin/uci setup creators resolve …` → confirm → `apply`; `enable`/`disable <channel id>` |
 | Change times or limits | `bin/uci setup config show`, then `config set key=value …` |
 | Change content direction | edit the brief with the user, then `config brief --file …` |

@@ -68,6 +68,23 @@ description file sits next to them with the source, author and original link.
 Multi-file results, such as galleries, get their own folder. `--to <folder>`
 saves them elsewhere.
 
+### Keeping the download engines current
+
+The downloads rely on open-source engines from GitHub. Setup installs two
+scheduled background jobs, whether or not monitoring is on:
+
+- **yt-dlp updates itself weekly.** Each new version is tried on a real
+  lookup and rolled back if it fails.
+- **The other engines are checked every two weeks:** gallery-dl, gdown,
+  trafilatura, SingleFile, rclone, aria2, deno, and whisper.cpp for
+  subtitles. Each is compared with its latest GitHub release. When one is
+  newer you get a macOS notification. **Nothing is installed automatically.**
+
+```bash
+bin/uci engines    # check now: each engine's version and how to update it
+bin/uci status     # the result of the last check
+```
+
 ## Companion feature: automatic monitoring (optional)
 
 ```
@@ -93,7 +110,7 @@ Turning it on and off:
 ```bash
 bin/uci settings --monitoring on     # on; if it has never been set up, run bin/uci setup as prompted
 bin/uci settings --monitoring off    # off: stops the local worker and pauses the cloud; creators and settings are kept
-bin/uci status                       # how automatic monitoring is running
+bin/uci status                       # how automatic monitoring is running, and whether the engines are current
 ```
 
 Setup needs a Google account, and a wizard walks you through it in about 30–60

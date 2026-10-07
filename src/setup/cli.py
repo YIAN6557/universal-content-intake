@@ -91,6 +91,10 @@ def _check_lines(checks: list[environment.Check]) -> list[str]:
     return [f"[{check.who}] {check.label}：{check.fix}" for check in checks if not check.ok and check.required]
 
 
+def maintenance_installed() -> bool:
+    return all(launchagent.is_loaded(label) and launchagent.installed_here(label) for label in launchagent.MAINTENANCE_LABELS)
+
+
 def build_steps(ctx: Context) -> list[Step]:
     by_key = {check.key: check for check in ctx.checks}
     prefs = ctx.prefs
@@ -119,6 +123,8 @@ def build_steps(ctx: Context) -> list[Step]:
             "系统设置 → 通用 → 语言与地区 → 翻译语言，下载“英语”和“中文（简体）”。",
             "下载完成后重新运行 bin/uci setup 核对。"]))
     if not prefs.monitoring:
+        steps.append(Step("maintenance", "下载引擎的定期维护：每周自动更新 yt-dlp，每两周检查其他引擎有没有新版本", AGENT,
+                          maintenance_installed(), guide=["运行 bin/uci setup launchagent install（只装这两个定时任务，不装自动监控的后台程序）"]))
         steps.append(Step("verify-download", "验收：试下载一个文件" + ("，并试一次翻译压制" if prefs.needs_subtitle_tools else ""),
                           AGENT, bool(state.get("download_verified_at")),
                           guide=["运行 bin/uci setup verify（下载一个公开的测试 PDF"
@@ -195,8 +201,8 @@ def build_steps(ctx: Context) -> list[Step]:
         " 标题过滤默认不开启，可选规则：PODCAST、KEYNOTE、QA、LIVESTREAM、REVIEW、FINANCE、TUTORIAL、GAMING、NEWS_ROUNDUP、AD，"
         "例如 content_title_filters=PODCAST,AD。",
         "3.（本人）确认后：bin/uci setup confirm preferences"]))
-    worker_ok = launchagent.is_loaded(WORKER_LABEL) and launchagent.installed_here()
-    steps.append(Step("worker", "安装本机后台程序（LaunchAgent）", AGENT, worker_ok,
+    worker_ok = launchagent.is_loaded(WORKER_LABEL) and launchagent.installed_here() and maintenance_installed()
+    steps.append(Step("worker", "安装本机后台程序：处理任务、每周更新 yt-dlp、每两周检查下载引擎", AGENT, worker_ok,
                       guide=["运行 bin/uci setup launchagent install"]))
     steps.append(Step("permissions", "macOS 权限：通知、下载文件夹和交付文件夹访问", HUMAN,
                       store.is_confirmed(state, "macos-permissions"), guide=[
@@ -503,13 +509,14 @@ def cmd_skip(args: argparse.Namespace) -> int:
 
 def cmd_launchagent(args: argparse.Namespace) -> int:
     if args.action == "install":
-        for path in launchagent.install():
+        # Download-only installations get just the maintenance agents.
+        for path in launchagent.install(labels=launchagent.labels_for(bool(preferences.load().monitoring))):
             print(f"✓ 已安装并加载 {path}")
     elif args.action == "uninstall":
         launchagent.uninstall()
         print("✓ 已卸载后台程序")
     else:
-        for label in (WORKER_LABEL, launchagent.UPDATE_LABEL):
+        for label in launchagent.ALL_LABELS:
             print(f" {'✓' if launchagent.is_loaded(label) else '✗'} {label}")
     return 0
 

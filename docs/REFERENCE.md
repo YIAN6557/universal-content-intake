@@ -11,7 +11,7 @@ Two layers: the one-link downloader (`bin/uci <link>`) is the product; automatic
 | `src/media/` | Subtitle discovery/selection, VAD + Whisper ASR, Apple Translation bridge, subtitle layout, burn-in, publish assist |
 | `src/output/` | Workspace containment, output paths, `info.md`, delivery to the delivery folder and the Chinese publish sheet |
 | `src/uci_cli.py` | `bin/uci`: the single entry point (download, `settings`, `setup`, `status`) and the first-run questions |
-| `src/queue/` | Signed Queue API client, Keychain secret, LaunchAgent Worker, `bin/uci status` report, weekly yt-dlp updater |
+| `src/queue/` | Signed Queue API client, Keychain secret, LaunchAgent Worker, `bin/uci status` report, weekly yt-dlp updater, two-weekly engine check (`engine_check.py`: GitHub `releases/latest` redirect, notify only) |
 | `src/setup/` | `bin/uci setup` wizard and `preferences.py` (the two first-run choices) |
 | `src/get_cli.py` | the one-link downloader behind `bin/uci <link>` (stated type, or detection by platform → extension → server response; subtitles per the saved choice or `--zh`/`--no-zh`) |
 | `cloud/apps-script/` | Creator discovery, snapshots, baselines, HOT scoring, content filter, optional Gemini judge, daily selection, Queue sheet and the HMAC-authenticated Web App |

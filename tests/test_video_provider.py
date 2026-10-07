@@ -3,10 +3,12 @@ from __future__ import annotations
 import dataclasses
 
 import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from src.core.job import ContentType, Job
 from src.core.policies import load_default_policies
@@ -299,7 +301,10 @@ class VideoProviderWorkspaceTests(unittest.TestCase):
             calls = [json.loads(line) for line in call_log.read_text(encoding="utf-8").splitlines()]
             self.assertEqual(len(calls), 1)
             self.assertFalse(any("--cookies-from-browser" in part for part in calls[0]))
-        self.assertFalse(load_default_policies(DEFAULTS).video_allow_browser_cookies)
+        # The shipped default, not whatever this Mac's own user config chose.
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict(os.environ, {"UCI_CONFIG": str(Path(directory) / "config.yaml")}):
+            self.assertFalse(load_default_policies(DEFAULTS).video_allow_browser_cookies)
 
     def test_probe_retries_with_chrome_only_after_explicit_youtube_auth_failure(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

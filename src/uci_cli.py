@@ -3,7 +3,8 @@
   bin/uci <链接或一句话>       download (the main feature)
   bin/uci settings [...]      show or change the two first-run choices
   bin/uci setup [...]         guided setup (environment, subtitle tools, automatic monitoring)
-  bin/uci status [...]        automatic monitoring health report
+  bin/uci status [...]        engine freshness and, when on, the automatic monitoring report
+  bin/uci engines             check GitHub for newer download engines now (never installs)
 
 The first time any command runs, two questions are asked: whether to turn on
 automatic monitoring, and whether downloaded videos get Chinese subtitles
@@ -19,14 +20,15 @@ from typing import Callable, Sequence
 
 from src.setup import preferences
 
-SUBCOMMANDS = {"get", "setup", "status", "settings", "help"}
+SUBCOMMANDS = {"get", "setup", "status", "settings", "engines", "help"}
 HELP = """用法：
   bin/uci <链接>                      下载这个链接里的内容（视频、文档、图片、文章、网页），类型自动判断
   bin/uci "下载这个链接里的PDF <链接>"   说明了要什么，就直接用对应方式下载
   bin/uci <链接> --zh / --no-zh        视频：这次翻译压制中文字幕 / 这次只下载原视频
   bin/uci settings                    查看或修改：自动监控、视频翻译压制
   bin/uci setup                       配置向导：检查环境、安装工具、配置自动监控
-  bin/uci status                      自动监控的运行情况
+  bin/uci status                      运行情况：下载引擎是否最新，以及自动监控（启用时）
+  bin/uci engines                     现在检查下载引擎在 GitHub 上有没有新版本
 更多选项：bin/uci get --help、bin/uci setup --help"""
 
 
@@ -86,7 +88,7 @@ def _set_monitoring(enabled: bool, previously: bool | None, *, out: Callable[[st
             except QueueApiError as error:
                 out(f"⚠ 云端没能恢复（{error.code}）。稍后重试：bin/uci settings --monitoring on")
             if store.read_state().get("verified_at"):
-                launchagent.install()
+                launchagent.install(labels=launchagent.labels_for(True))
                 out("✓ 本机后台程序已启动。")
         out("✓ 自动监控：启用。" + ("" if configured else "接下来运行 bin/uci setup，向导会一步步带你完成配置。"))
         return
@@ -97,20 +99,29 @@ def _set_monitoring(enabled: bool, previously: bool | None, *, out: Callable[[st
         except QueueApiError as error:
             out(f"⚠ 云端没能暂停（{error.code}）。稍后重试：bin/uci settings --monitoring off")
     if launchagent.installed_here():
-        launchagent.uninstall()
-        out("✓ 本机后台程序已停止。")
+        # Only the Worker: the yt-dlp update and the engine check stay on for the downloader.
+        launchagent.uninstall(labels=(launchagent.WORKER_LABEL,))
+        out("✓ 本机后台程序已停止（下载引擎的定期更新和检查保留）。")
     preferences.save(monitoring=False)
     out("✓ 自动监控：不启用。重新开启：bin/uci settings --monitoring on")
 
 
 def cmd_status(argv: Sequence[str], *, out: Callable[[str], None] = print) -> int:
+    from src.queue import engine_check
+
     if not preferences.load().monitoring:
         out("自动监控没有启用，这台 Mac 只使用下载功能。")
         out("开启：bin/uci settings --monitoring on")
-        return 0
-    from src.queue import status_cli
+        code = 0
+    else:
+        from src.queue import status_cli
 
-    return status_cli.main(list(argv))
+        code = status_cli.main(list(argv))
+    if "--json" not in argv:
+        out("")
+        for line in engine_check.summary_lines(engine_check.read_state()):
+            out(line)
+    return code
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -142,6 +153,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_settings(rest, interactive=interactive)
     if command == "status":
         return cmd_status(rest)
+    if command == "engines":
+        from src.queue import engine_check
+
+        return engine_check.main(rest)
     if command == "setup":
         from src.setup import cli as setup_cli
 

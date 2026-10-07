@@ -100,7 +100,8 @@ class SettingsTests(TempConfig):
                 mock.patch.object(launchagent, "uninstall") as stopped, redirect_stdout(io.StringIO()):
             uci_cli.cmd_settings(["--monitoring", "off"], interactive=False)
         paused.assert_called_once_with(False)
-        stopped.assert_called_once()
+        # Only the Worker stops; the downloader keeps its yt-dlp update and engine check.
+        stopped.assert_called_once_with(labels=(launchagent.WORKER_LABEL,))
         self.assertFalse(preferences.load().monitoring)
 
     def test_turning_monitoring_on_before_setup_points_to_the_wizard(self) -> None:
@@ -128,10 +129,10 @@ class WizardStepsTests(TempConfig):
             return [step.key for step in setup_cli.build_steps(ctx)]
 
     def test_download_only_needs_just_the_environment_and_a_trial_download(self) -> None:
-        self.assertEqual(self.steps(False, "off"), ["env", "verify-download"])
+        self.assertEqual(self.steps(False, "off"), ["env", "maintenance", "verify-download"])
 
     def test_subtitles_add_the_tools_and_translation_pack(self) -> None:
-        self.assertEqual(self.steps(False, "ask"), ["env", "tools", "translation", "verify-download"])
+        self.assertEqual(self.steps(False, "ask"), ["env", "tools", "translation", "maintenance", "verify-download"])
 
     def test_monitoring_adds_the_cloud_steps_and_always_needs_the_subtitle_tools(self) -> None:
         keys = self.steps(True, "off")
@@ -139,6 +140,7 @@ class WizardStepsTests(TempConfig):
         self.assertIn("clasp-login", keys)
         self.assertEqual(keys[-1], "verify")
         self.assertNotIn("verify-download", keys)
+        self.assertNotIn("maintenance", keys)  # the worker step installs the maintenance agents too
 
     def test_doctor_ignores_tools_for_features_that_are_off(self) -> None:
         check = environment.Check("clasp", "clasp", False)
@@ -169,7 +171,7 @@ class LaunchAgentOwnershipTests(unittest.TestCase):
         (self.agents / f"{label}.plist").write_bytes(plistlib.dumps({"Label": label, "WorkingDirectory": str(working_directory)}))
 
     def test_another_installations_agents_are_left_alone(self) -> None:
-        for label in (self.launchagent.WORKER_LABEL, self.launchagent.UPDATE_LABEL):
+        for label in self.launchagent.ALL_LABELS:
             self.write_agent(label, self.agents / "elsewhere")
         self.assertFalse(self.launchagent.installed_here())
         with mock.patch.object(self.launchagent, "_launchctl") as launchctl:
@@ -180,12 +182,25 @@ class LaunchAgentOwnershipTests(unittest.TestCase):
             self.launchagent.install()
 
     def test_this_installations_agents_are_recognized_and_removed(self) -> None:
-        for label in (self.launchagent.WORKER_LABEL, self.launchagent.UPDATE_LABEL):
+        for label in self.launchagent.ALL_LABELS:
             self.write_agent(label, self.launchagent.PROJECT_ROOT)
         self.assertTrue(self.launchagent.installed_here())
         with mock.patch.object(self.launchagent, "_launchctl", return_value=mock.Mock(returncode=1)):
             self.launchagent.uninstall()
         self.assertFalse((self.agents / f"{self.launchagent.WORKER_LABEL}.plist").exists())
+
+    def test_download_only_installs_just_the_maintenance_agents(self) -> None:
+        with mock.patch.object(self.launchagent, "LOG_DIR", self.agents / "logs"), \
+                mock.patch.object(self.launchagent, "is_loaded", return_value=False), \
+                mock.patch.object(self.launchagent, "_launchctl", return_value=mock.Mock(returncode=0)):
+            written = self.launchagent.install(labels=self.launchagent.labels_for(False))
+        self.assertEqual(sorted(path.stem for path in written), sorted(self.launchagent.MAINTENANCE_LABELS))
+        self.assertFalse((self.agents / f"{self.launchagent.WORKER_LABEL}.plist").exists())
+        import plistlib
+
+        engine = plistlib.loads((self.agents / f"{self.launchagent.ENGINE_CHECK_LABEL}.plist").read_bytes())
+        self.assertEqual(engine["ProgramArguments"][-2:], ["src.queue.engine_check", "--scheduled"])
+        self.assertEqual(engine["StartCalendarInterval"], {"Hour": 14, "Minute": 30})
 
 
 if __name__ == "__main__":

@@ -1,4 +1,10 @@
-"""Install the background Worker and the weekly yt-dlp updater as per-user LaunchAgents."""
+"""Install the background agents as per-user LaunchAgents.
+
+Two maintenance agents keep the download engines current for every user: the
+weekly yt-dlp updater and the engine check (daily trigger, runs every two
+weeks, only notifies). The Worker is installed only when automatic monitoring
+is on.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +19,9 @@ from src.queue.status_cli import WORKER_LABEL
 from src.setup.environment import PROJECT_ROOT
 
 UPDATE_LABEL = "local.universal-content-intake.ytdlp-update"
+ENGINE_CHECK_LABEL = "local.universal-content-intake.engine-check"
+MAINTENANCE_LABELS = (UPDATE_LABEL, ENGINE_CHECK_LABEL)
+ALL_LABELS = (WORKER_LABEL, *MAINTENANCE_LABELS)
 AGENTS_DIR = Path.home() / "Library" / "LaunchAgents"
 LOG_DIR = Path.home() / "Library" / "Logs" / "Universal Content Intake"
 SEARCH_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -47,6 +56,16 @@ def definitions(python: str = sys.executable) -> dict[str, dict[str, Any]]:
             "StandardErrorPath": str(LOG_DIR / "ytdlp-update.log"),
             **common,
         },
+        ENGINE_CHECK_LABEL: {
+            "Label": ENGINE_CHECK_LABEL,
+            "ProgramArguments": [python, "-m", "src.queue.engine_check", "--scheduled"],
+            "RunAtLoad": False,
+            # Fires daily; the job itself only checks when the last check is two weeks old.
+            "StartCalendarInterval": {"Hour": 14, "Minute": 30},
+            "StandardOutPath": str(LOG_DIR / "engine-check.log"),
+            "StandardErrorPath": str(LOG_DIR / "engine-check.log"),
+            **common,
+        },
     }
 
 
@@ -73,9 +92,13 @@ def installed_here(label: str = WORKER_LABEL) -> bool:
     return owner(label) == PROJECT_ROOT.resolve()
 
 
-def install(python: str = sys.executable) -> list[Path]:
+def labels_for(monitoring: bool) -> tuple[str, ...]:
+    return ALL_LABELS if monitoring else MAINTENANCE_LABELS
+
+
+def install(python: str = sys.executable, labels: tuple[str, ...] = ALL_LABELS) -> list[Path]:
     # The labels are per user, so another clone of this project may already own them.
-    for label in (WORKER_LABEL, UPDATE_LABEL):
+    for label in labels:
         other = owner(label)
         if other is not None and other != PROJECT_ROOT.resolve():
             raise RuntimeError(f"另一个安装目录（{other}）已经在用后台程序。先在那个目录运行 bin/uci settings --monitoring off，再在这里安装。")
@@ -83,6 +106,8 @@ def install(python: str = sys.executable) -> list[Path]:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     written = []
     for label, definition in definitions(python).items():
+        if label not in labels:
+            continue
         path = plist_path(label)
         if is_loaded(label):
             _launchctl("bootout", f"gui/{os.getuid()}/{label}")
@@ -94,10 +119,10 @@ def install(python: str = sys.executable) -> list[Path]:
     return written
 
 
-def uninstall() -> None:
+def uninstall(labels: tuple[str, ...] = ALL_LABELS) -> None:
     """Remove this installation's agents; agents installed from another directory are left alone."""
 
-    for label in (WORKER_LABEL, UPDATE_LABEL):
+    for label in labels:
         if owner(label) not in (None, PROJECT_ROOT.resolve()):
             continue
         if is_loaded(label):

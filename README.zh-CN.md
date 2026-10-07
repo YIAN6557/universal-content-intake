@@ -40,6 +40,18 @@ bin/uci "下载这个视频 https://www.youtube.com/watch?v=…"
 
 下载完成后，文件默认放在"下载"文件夹，用原标题命名，旁边附一份"信息"说明文件（来源、作者、原链接等）。多个文件（例如图集）会放进以标题命名的子文件夹。可以用 `--to 文件夹` 换位置。
 
+### 下载引擎保持最新
+
+各类下载能力来自 GitHub 上的开源下载引擎，配置向导会装两个后台定时任务（不管是否启用自动监控）：
+
+- **yt-dlp 每周自动更新**：更新后真实试一次，新版本出问题就自动退回旧版本。
+- **其他引擎每两周检查一次**：gallery-dl、gdown、trafilatura、SingleFile、rclone、aria2、deno，以及翻译压制用的 whisper.cpp。和各自 GitHub 上的最新正式版本对比，有新版本时发一条系统通知，**只提醒，不自动安装**。
+
+```bash
+bin/uci engines    # 现在就检查一次，列出每个引擎的版本和更新命令
+bin/uci status     # 查看上一次检查的结果
+```
+
 ## 配套功能：自动监控（可选）
 
 ```
@@ -60,7 +72,7 @@ bin/uci "下载这个视频 https://www.youtube.com/watch?v=…"
 ```bash
 bin/uci settings --monitoring on     # 开启；还没配置过的话，按提示运行 bin/uci setup 完成配置
 bin/uci settings --monitoring off    # 关闭：停掉本机后台程序，并暂停云端；作者名单和设置都保留
-bin/uci status                       # 查看自动监控的运行情况
+bin/uci status                       # 查看自动监控的运行情况，以及下载引擎是否最新
 ```
 
 配置需要一个 Google 账号，向导会一步步带你完成，大约 30–60 分钟。**不需要申请 YouTube API Key**：云端用你自己的 Google 授权访问 YouTube，每天免费配额 10,000 单位，常规用量一两千。推荐再申请一个免费的 Gemini API Key（约 2 分钟），用来按内容方向筛选视频、撰写发布文案。
