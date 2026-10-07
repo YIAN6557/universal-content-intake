@@ -108,10 +108,11 @@ def _single_file() -> str | None:
 
 
 def _whisper_cpp() -> str | None:
-    # Compiled from a pinned tag by `bin/uci setup build-tools`; the binary has no --version.
-    from src.setup.environment import WHISPER_CLI, WHISPER_TAG
+    # The binaries have no --version; build-tools records the release it built.
+    from src.setup.environment import installed_whisper_version
 
-    return WHISPER_TAG.lstrip("v") if WHISPER_CLI.is_file() else None
+    version = installed_whisper_version()
+    return version.lstrip("v") if version else None
 
 
 def _pip_update(package: str) -> Callable[[str], str]:
@@ -142,7 +143,8 @@ ENGINES: tuple[Engine, ...] = (
     Engine("deno", "deno（yt-dlp 解析 YouTube 用）", "denoland/deno",
            lambda: _cli_version(DENO_PATH, "--version"), _deno_update),
     Engine("whisper.cpp", "whisper.cpp（语音识别，翻译压制用）", "ggml-org/whisper.cpp", _whisper_cpp,
-           lambda latest: "这是固定版本编译的，不建议单独升级：等项目更新固定版本后，运行 git pull 和 bin/uci setup build-tools"),
+           lambda latest: "bin/uci setup build-tools --skip-models --skip-swift --update-whisper"
+                          "（编译新版本，用自带测试录音自检通过才替换，失败保留旧版本；约 2–5 分钟）"),
 )
 
 

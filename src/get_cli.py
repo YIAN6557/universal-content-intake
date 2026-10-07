@@ -91,6 +91,17 @@ def _host_matches(host: str, domains: Sequence[str]) -> bool:
     return any(host == domain or host.endswith("." + domain) for domain in domains)
 
 
+def _trim_link(link: str) -> str:
+    """Drop punctuation that ends the sentence, but keep a closing parenthesis the link itself opened
+    (https://en.wikipedia.org/wiki/Python_(programming_language))."""
+
+    while link and link[-1] in "，。、）)>\"'":
+        if link[-1] == ")" and link.count("(") >= link.count(")"):
+            break
+        link = link[:-1]
+    return link
+
+
 def parse_request(words: Sequence[str]) -> tuple[str, ContentType | None]:
     """Split a request like "帮我下载这个链接里的PDF https://…" into the link and a named type."""
 
@@ -98,7 +109,7 @@ def parse_request(words: Sequence[str]) -> tuple[str, ContentType | None]:
     links = URL.findall(text)
     if len(links) != 1:
         raise GetError("请给出一个链接（http/https 开头）。" if not links else "一次只能下载一个链接。")
-    link = links[0].rstrip("，。、）)>\"'")
+    link = _trim_link(links[0])
     rest = text.replace(links[0], " ").casefold()
     found = []
     for content_type, keywords in TYPE_WORDS:

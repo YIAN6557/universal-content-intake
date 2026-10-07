@@ -45,7 +45,7 @@ bin/uci "下载这个视频 https://www.youtube.com/watch?v=…"
 各类下载能力来自 GitHub 上的开源下载引擎，配置向导会装两个后台定时任务（不管是否启用自动监控）：
 
 - **yt-dlp 每周自动更新**：更新后真实试一次，新版本出问题就自动退回旧版本。
-- **其他引擎每两周检查一次**：gallery-dl、gdown、trafilatura、SingleFile、rclone、aria2、deno，以及翻译压制用的 whisper.cpp。和各自 GitHub 上的最新正式版本对比，有新版本时发一条系统通知，**只提醒，不自动安装**。
+- **其他引擎每两周检查一次**：gallery-dl、gdown、trafilatura、SingleFile、rclone、aria2、deno，以及翻译压制用的 whisper.cpp。和各自 GitHub 上的最新正式版本对比，有新版本时发一条系统通知，**只提醒，不自动安装**。通知里的更新命令都是一条；whisper.cpp 的升级会先用测试录音自检，通过才替换。
 
 ```bash
 bin/uci engines    # 现在就检查一次，列出每个引擎的版本和更新命令

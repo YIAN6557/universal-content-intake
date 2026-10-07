@@ -79,6 +79,8 @@ scheduled background jobs, whether or not monitoring is on:
   trafilatura, SingleFile, rclone, aria2, deno, and whisper.cpp for
   subtitles. Each is compared with its latest GitHub release. When one is
   newer you get a macOS notification. **Nothing is installed automatically.**
+  Each update is one command; a whisper.cpp upgrade is built and checked on
+  a test recording first, and the old build stays if the check fails.
 
 ```bash
 bin/uci engines    # check now: each engine's version and how to update it

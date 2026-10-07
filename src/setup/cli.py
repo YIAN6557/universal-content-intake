@@ -284,7 +284,8 @@ def cmd_doctor(_: argparse.Namespace) -> int:
 
 
 def cmd_build_tools(args: argparse.Namespace) -> int:
-    environment.build_tools(models=not args.skip_models, whisper=not args.skip_whisper, swift=not args.skip_swift)
+    environment.build_tools(models=not args.skip_models, whisper=not args.skip_whisper, swift=not args.skip_swift,
+                            update_whisper=args.update_whisper)
     return 0
 
 
@@ -603,6 +604,8 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--skip-models", action="store_true")
     build.add_argument("--skip-whisper", action="store_true")
     build.add_argument("--skip-swift", action="store_true")
+    build.add_argument("--update-whisper", action="store_true",
+                       help="whisper.cpp 有新版本时编译新版本，自检通过才替换，失败保留旧版本")
     cloud_parser = sub.add_parser("cloud", help="云端：create | push | deploy | open")
     cloud_parser.add_argument("action", choices=("create", "push", "deploy", "open"))
     cloud_parser.add_argument("--title", default=cloud.DEFAULT_TITLE)

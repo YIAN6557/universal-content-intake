@@ -72,7 +72,7 @@ bin/uci setup launchagent install
 装两个后台定时任务（不装自动监控的处理程序）：
 
 - `local.universal-content-intake.ytdlp-update`：每周自动更新 yt-dlp，更新后真实试一次，失败就退回旧版本。
-- `local.universal-content-intake.engine-check`：每两周检查 gallery-dl、gdown、trafilatura、SingleFile、rclone、aria2、deno 和 whisper.cpp 在 GitHub 上有没有新版本。有的话发系统通知，**只提醒，不自动安装**。
+- `local.universal-content-intake.engine-check`：每两周检查 gallery-dl、gdown、trafilatura、SingleFile、rclone、aria2、deno 和 whisper.cpp 在 GitHub 上有没有新版本。有的话发系统通知，**只提醒，不自动安装**；`bin/uci engines` 会给出每个引擎的一条更新命令。
 
 想马上检查一次：`bin/uci engines`，会列出每个引擎的本机版本、最新版本和更新命令。上一次检查的结果也会显示在 `bin/uci status` 里。
 
@@ -102,7 +102,8 @@ bin/uci setup build-tools
 ```
 
 - 下载 Whisper small 多语言模型（约 490 MB）和 Silero VAD 模型，并逐个校验 SHA-256。
-- 从 v1.9.4 源码编译 whisper.cpp（需要 cmake，没有的话：`brew install cmake` 或 `python3 -m pip install --user cmake`）。
+- 从 GitHub 上最新的正式版本编译 whisper.cpp（需要 cmake，没有的话：`brew install cmake` 或 `python3 -m pip install --user cmake`）。编译完先用 whisper.cpp 自带的测试录音自检，通过才安装；连不上 GitHub 或最新版本自检失败时，改用已验证过的版本。
+- 以后 whisper.cpp 出了新版本（每两周的检查会提醒），升级只要一条命令：`bin/uci setup build-tools --skip-models --skip-swift --update-whisper`。新版本自检不通过就保留旧版本。
 - 编译 Apple 翻译小工具和 PDF 信息小工具（需要 Xcode 命令行工具）。
 
 可以用 `--skip-models`、`--skip-whisper`、`--skip-swift` 跳过其中某项。

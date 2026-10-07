@@ -30,6 +30,10 @@ class RequestParsingTests(unittest.TestCase):
 
     def test_a_bare_link_names_no_type_and_conflicts_are_rejected(self) -> None:
         self.assertEqual(parse_request(["https://example.com/x"]), ("https://example.com/x", None))
+        wiki = "https://en.wikipedia.org/wiki/Python_(programming_language)"
+        self.assertEqual(parse_request([wiki])[0], wiki)
+        self.assertEqual(parse_request([f"下载这篇（{wiki}）。"])[0], wiki)
+        self.assertEqual(parse_request(["(see", "https://example.com/x)"])[0], "https://example.com/x")
         with self.assertRaises(GetError):
             parse_request(["下载视频和PDF", "https://example.com/x"])
         with self.assertRaises(GetError):

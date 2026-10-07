@@ -27,8 +27,17 @@ from src.providers.video import DENO_PATH, FFMPEG_PATH, FFPROBE_PATH, YTDLP_PATH
 AGENT = "Agent"
 HUMAN = "本人"
 
-WHISPER_TAG = "v1.9.4"
-WHISPER_SOURCE = f"https://github.com/ggml-org/whisper.cpp/archive/refs/tags/{WHISPER_TAG}.tar.gz"
+WHISPER_REPO = "ggml-org/whisper.cpp"
+# whisper.cpp is built from its newest GitHub release and kept only if it passes
+# whisper_self_test. This tag is the last release known to work with this code;
+# it is used only when GitHub cannot be reached, or when a first install finds
+# that the newest release fails the self-test.
+WHISPER_FALLBACK_TAG = "v1.9.4"
+WHISPER_VERSION_FILE = WHISPER_ROOT / "VERSION"
+
+
+def whisper_source(tag: str) -> str:
+    return f"https://github.com/{WHISPER_REPO}/archive/refs/tags/{tag}.tar.gz"
 PDFINFO_DIR = PROJECT_ROOT / "apple-helper" / "PDFInfo"
 TRANSLATION_DIR = PROJECT_ROOT / "apple-helper" / "Translation"
 
@@ -229,17 +238,49 @@ def _check(command: list[str], *, cwd: Path | None = None, log: Callable[[str], 
         raise RuntimeError(f"命令失败（退出码 {result.returncode}）：{' '.join(command)}\n{tail}")
 
 
-def build_whisper(*, log: Callable[[str], None] = print) -> None:
-    if _executable(WHISPER_CLI) and _executable(VAD_CLI):
-        log("✓ whisper.cpp 已编译")
-        return
-    cmake = shutil.which("cmake") or str(locate_tool("cmake", "UCI_CMAKE_PATH"))
-    if not _executable(Path(cmake)):
-        raise RuntimeError("需要 cmake：" + _brew_or("cmake", _pip("cmake")))
+def installed_whisper_version() -> str | None:
+    """The release tag the binaries were built from; builds from before VERSION existed used the fallback tag."""
+
+    if not (_executable(WHISPER_CLI) and _executable(VAD_CLI)):
+        return None
+    try:
+        return WHISPER_VERSION_FILE.read_text(encoding="utf-8").strip() or WHISPER_FALLBACK_TAG
+    except OSError:
+        return WHISPER_FALLBACK_TAG
+
+
+def whisper_self_test(bin_dir: Path, sample: Path, workdir: Path) -> str:
+    """Run the two binaries the way the subtitle pipeline does, on whisper.cpp's own JFK sample.
+
+    Raises when the speech segments or the transcript are not what that recording contains,
+    for example when a release changes its output format. Returns a one-line summary."""
+
+    from src.media.asr import ASRRuntimeError, run_silero_vad, transcribe_with_whisper_cpp
+
+    if not (SMALL_MODEL.is_file() and VAD_MODEL.is_file()):
+        raise RuntimeError("缺少语音识别模型，先运行 bin/uci setup build-tools")
+    try:
+        vad = run_silero_vad(sample, vad_binary=bin_dir / "whisper-vad-speech-segments", vad_model=VAD_MODEL, timeout_seconds=120)
+        speech = vad.speech_duration_seconds
+        if not 5 <= speech <= 11.5:  # the sample is 11 s, almost all speech
+            raise RuntimeError(f"人声检测结果不对：识别出 {speech:.1f} 秒人声，应为 5–11 秒")
+        result = transcribe_with_whisper_cpp(sample, whisper_binary=bin_dir / "whisper-cli", model_path=SMALL_MODEL,
+                                             output_base=workdir / "self-test", timeout_seconds=600)
+    except ASRRuntimeError as error:
+        raise RuntimeError(f"运行失败：{error}") from None
+    text = " ".join(str(cue.get("text", "")) for cue in result["cues"]).lower()
+    if result["detected_language"] != "en" or "country" not in text:
+        raise RuntimeError(f"识别结果不对：语言 {result['detected_language']}，文字“{text[:80]}”")
+    return f"人声 {speech:.1f} 秒，识别出“{text.strip()[:60]}”"
+
+
+def _build_whisper_tag(tag: str, cmake: str, log: Callable[[str], None]) -> None:
+    """Build one release in a scratch directory and install it only after it passes the self-test."""
+
     with tempfile.TemporaryDirectory(prefix="uci-whisper-") as temporary:
         archive = Path(temporary) / "whisper.tar.gz"
-        log(f"下载 whisper.cpp {WHISPER_TAG} 源码…")
-        download(WHISPER_SOURCE, archive, log=log)
+        log(f"下载 whisper.cpp {tag} 源码…")
+        download(whisper_source(tag), archive, log=log)
         with tarfile.open(archive) as bundle:
             bundle.extractall(temporary, filter="data")
         source = next(path for path in Path(temporary).iterdir() if path.is_dir() and path.name.startswith("whisper.cpp"))
@@ -248,11 +289,52 @@ def build_whisper(*, log: Callable[[str], None] = print) -> None:
                 "-DWHISPER_BUILD_TESTS=OFF", "-DWHISPER_BUILD_SERVER=OFF"], log=log)
         _check([cmake, "--build", str(build), "--config", "Release", "-j", str(os.cpu_count() or 4),
                 "--target", "whisper-cli", "whisper-vad-speech-segments"], log=log)
+        log("用 whisper.cpp 自带的测试录音自检…")
+        summary = whisper_self_test(build / "bin", source / "samples" / "jfk.wav", Path(temporary))
+        log(f"✓ 自检通过：{summary}")
         (WHISPER_ROOT / "bin").mkdir(parents=True, exist_ok=True)
         for name in ("whisper-cli", "whisper-vad-speech-segments"):
-            shutil.copy2(build / "bin" / name, WHISPER_ROOT / "bin" / name)
+            staged = WHISPER_ROOT / "bin" / f".{name}.new"
+            shutil.copy2(build / "bin" / name, staged)
+            staged.replace(WHISPER_ROOT / "bin" / name)
         shutil.copy2(source / "LICENSE", WHISPER_ROOT / "LICENSE")
-    log("✓ whisper.cpp 编译完成")
+        WHISPER_VERSION_FILE.write_text(tag + "\n", encoding="utf-8")
+
+
+def build_whisper(*, update: bool = False, log: Callable[[str], None] = print) -> None:
+    """Build whisper.cpp from the newest release (update=True replaces an existing build when a newer one exists)."""
+
+    current = installed_whisper_version()
+    if current and not update:
+        log(f"✓ whisper.cpp 已编译（{current}）")
+        return
+    cmake = shutil.which("cmake") or str(locate_tool("cmake", "UCI_CMAKE_PATH"))
+    if not _executable(Path(cmake)):
+        raise RuntimeError("需要 cmake：" + _brew_or("cmake", _pip("cmake")))
+    from src.queue.engine_check import is_newer, latest_release
+
+    try:
+        target = latest_release(WHISPER_REPO)
+    except (OSError, RuntimeError) as error:
+        if current:
+            raise RuntimeError(f"没能查到 whisper.cpp 的最新版本（{error}），保留现有的 {current}") from None
+        log(f"没能查到最新版本（{error}），改用已验证的 {WHISPER_FALLBACK_TAG}")
+        target = WHISPER_FALLBACK_TAG
+    if current and not is_newer(target, current):
+        log(f"✓ whisper.cpp 已是最新（{current}）")
+        return
+    tags = [target] + ([WHISPER_FALLBACK_TAG] if not current and target != WHISPER_FALLBACK_TAG else [])
+    failure = ""
+    for tag in tags:
+        try:
+            _build_whisper_tag(tag, cmake, log)
+        except RuntimeError as error:
+            failure = f"{tag}：{error}"
+            log(f"✗ whisper.cpp {failure}")
+            continue
+        log(f"✓ whisper.cpp {tag} 已安装" + (f"（原来是 {current}）" if current else ""))
+        return
+    raise RuntimeError(f"whisper.cpp 没有安装成功（{failure}）" + (f"；已保留原来的 {current}" if current else ""))
 
 
 def build_swift_helpers(*, log: Callable[[str], None] = print) -> None:
@@ -266,10 +348,11 @@ def build_swift_helpers(*, log: Callable[[str], None] = print) -> None:
     log("✓ Swift 小工具编译完成")
 
 
-def build_tools(*, models: bool = True, whisper: bool = True, swift: bool = True, log: Callable[[str], None] = print) -> None:
+def build_tools(*, models: bool = True, whisper: bool = True, swift: bool = True, update_whisper: bool = False,
+                log: Callable[[str], None] = print) -> None:
     if models:
         ensure_models(log=log)
     if whisper:
-        build_whisper(log=log)
+        build_whisper(update=update_whisper, log=log)
     if swift:
         build_swift_helpers(log=log)

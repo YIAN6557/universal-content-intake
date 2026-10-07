@@ -10,7 +10,7 @@ Downloaded or built on your Mac by `bin/uci-setup build-tools` (not stored in th
 
 | Component | Source | License |
 |---|---|---|
-| whisper.cpp v1.9.4 (`whisper-cli`, `whisper-vad-speech-segments`) | https://github.com/ggml-org/whisper.cpp | MIT, copied to `tools/whisper.cpp/LICENSE` |
+| whisper.cpp, newest release at build time, recorded in `tools/whisper.cpp/VERSION` (`whisper-cli`, `whisper-vad-speech-segments`) | https://github.com/ggml-org/whisper.cpp | MIT, copied to `tools/whisper.cpp/LICENSE` |
 | Whisper `ggml-small.bin` model (OpenAI Whisper weights in ggml format) | https://huggingface.co/ggerganov/whisper.cpp | MIT |
 | Silero VAD `ggml-silero-v6.2.0.bin` | https://huggingface.co/ggml-org/whisper-vad | MIT |
 

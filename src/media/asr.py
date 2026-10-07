@@ -73,7 +73,7 @@ def _runtime_environment(binary: Path) -> dict[str, str]:
 def parse_vad_output(text: str) -> tuple[SpeechSegment, ...]:
     segments: list[SpeechSegment] = []
     for start_value, end_value in _VAD_SEGMENT.findall(text):
-        # whisper-vad-speech-segments v1.9.4 documents its console time base as centiseconds.
+        # whisper-vad-speech-segments prints centiseconds (documented as of v1.9.4; whisper_self_test catches a change).
         start, end = float(start_value) / 100, float(end_value) / 100
         if start >= 0 and end > start:
             segments.append(SpeechSegment(start, end))

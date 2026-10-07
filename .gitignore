@@ -10,6 +10,7 @@ __pycache__/
 /tools/document-runtime/bin/
 /tools/whisper.cpp/bin/
 /tools/whisper.cpp/lib/
+/tools/whisper.cpp/VERSION
 /apple-helper/*/bin/
 
 # Per-machine clasp project binding (created by bin/uci-setup cloud create).
