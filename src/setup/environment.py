@@ -136,7 +136,7 @@ def run_checks(*, deep: bool = True) -> list[Check]:
     checks: list[Check] = []
     if compat.WINDOWS:
         build = int(platform.version().split(".")[-1]) if platform.version().split(".")[-1].isdigit() else 0
-        checks.append(Check("windows", "Windows 10 或 11", platform.release() in {"10", "11"} and build >= 17763, HUMAN,
+        checks.append(Check("windows", "Windows 10 或 11", build >= 17763, HUMAN,
                             f"当前 Windows {platform.release()}（{platform.version()}）", "升级到 Windows 10（1809 或更新）或 Windows 11"))
     else:
         mac = platform.mac_ver()[0]

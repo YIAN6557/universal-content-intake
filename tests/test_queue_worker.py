@@ -728,6 +728,7 @@ class QueueWorkerTests(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertEqual(result.error.cause, "CORE_EXIT_0")
 
+    @unittest.skipIf(os.name == "nt", "caffeinate is macOS only; the Windows worker comes with automatic monitoring")
     def test_core_runner_starts_and_releases_caffeinate_only_for_active_core(self) -> None:
         runner = self._runner(caffeinate_executable="caffeinate")
         state = self._state("stable-job-caffeinate")
