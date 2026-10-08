@@ -36,8 +36,7 @@ jobs:
       - name: Install the download engines
         run: |
           python -m pip install trafilatura certifi "yt-dlp[default]" gallery-dl || exit /b 1
-          choco install ffmpeg -y --no-progress || exit /b 1
-          powershell -NoProfile -Command "irm https://deno.land/install.ps1 | iex" || exit /b 1
+          choco install ffmpeg deno -y --no-progress || exit /b 1
           npm install --prefix "%LOCALAPPDATA%\Universal Content Intake\runtime\single-file-cli" single-file-cli@2.15.7
       - name: First-run choices and environment check
         run: |
@@ -89,5 +88,5 @@ jobs:
         run: |
           set "SF=%LOCALAPPDATA%\Universal Content Intake\runtime\single-file-cli\node_modules\single-file-cli"
           dir "%SF%"
-          "%USERPROFILE%\.deno\bin\deno.exe" run --allow-read --allow-write --allow-net --allow-env --allow-run "%SF%\single-file" https://example.com "%RUNNER_TEMP%\sf.html" --browser-headless=true "--browser-executable-path=C:\Program Files\Google\Chrome\Application\chrome.exe"
+          deno run --allow-read --allow-write --allow-net --allow-env --allow-run "%SF%\single-file" https://example.com "%RUNNER_TEMP%\sf.html" --browser-headless=true "--browser-executable-path=C:\Program Files\Google\Chrome\Application\chrome.exe"
           dir "%RUNNER_TEMP%\sf.html"

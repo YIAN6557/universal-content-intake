@@ -15,7 +15,7 @@ from typing import Any, Callable, Mapping
 from src.core.policies import PROJECT_DEFAULTS_PATH, load_config
 from src.queue.client import QueueApiError
 from src.queue.status_cli import WORKER_LABEL
-from src.setup import cloud, creators as creator_tools, environment, launchagent, preferences, store, translation_setup
+from src.setup import cloud, creators as creator_tools, environment, launchagent, preferences, store
 from src.setup.environment import AGENT, HUMAN
 
 SHEETS = ("Creators", "Baseline", "Videos", "Snapshots", "Config", "Queue", "QueueClaimRequests")
@@ -627,9 +627,6 @@ def build_parser() -> argparse.ArgumentParser:
     skip.add_argument("step", choices=("gemini",))
     agent = sub.add_parser("launchagent", help="后台程序：install | uninstall | status")
     agent.add_argument("action", choices=("install", "uninstall", "status"))
-    translation = sub.add_parser("translation", help="字幕翻译用的在线模型：list | use <名字> | key | test | apple",
-                                 add_help=False)
-    translation.add_argument("rest", nargs=argparse.REMAINDER)
     verify = sub.add_parser("verify", help="验收并开启每日选片")
     verify.add_argument("--no-smoke", action="store_true", help="跳过端到端试跑")
     from src.setup.smoke import DEFAULT_SMOKE_URL
@@ -642,7 +639,6 @@ COMMANDS = {
     "status": cmd_status, "doctor": cmd_doctor, "build-tools": cmd_build_tools, "cloud": cmd_cloud,
     "secret": cmd_secret, "creators": cmd_creators, "config": cmd_config, "confirm": cmd_confirm,
     "skip": cmd_skip, "launchagent": cmd_launchagent, "verify": cmd_verify,
-    "translation": lambda args: translation_setup.main(args.rest),
 }
 
 

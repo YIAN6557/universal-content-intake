@@ -21,7 +21,6 @@ from src.media.subtitle_pipeline import SubtitleStageFailure, discover_and_selec
 from src.media.subtitles import Cue, is_zh_hans_language, normalize_language_code
 from src.media.translation import TranslationProtocolError, apply_translation_response, make_translation_request
 from src.media.translation_runtime import TranslationRuntimeError, translate_cues, translation_preflight
-from src.media import online_translation
 from src.providers.video import FFMPEG_PATH, FFPROBE_PATH, VideoProvider
 
 
@@ -252,14 +251,10 @@ def _translate(
     *,
     helper: Path,
     preflight: Mapping[str, Any] | None = None,
-    settings: online_translation.Settings | None = None,
 ) -> tuple[tuple[Cue, ...] | None, dict[str, Any]]:
     source = normalize_language_code(source_language)
     if source is None:
         raise ValueError("translation source language is not a normalized language code")
-    settings = settings or online_translation.load_settings()
-    if settings.engine == "online":
-        return _translate_online(cues, source, source_sha, workspace, settings)
     source_cues_sha = identity_hash({"cues": [cue.to_dict() for cue in cues]})
     helper_sha = sha256_file(helper)
     identity = {
@@ -325,55 +320,6 @@ def _translate(
         "language_pair_supported": True,
         "language_resources_installed": True,
         "preflight": dict(preflight),
-        "cue_count": len(translated),
-        "resumed": False,
-    }
-    workspace.write_cache("translation", identity, [request_relative, response_relative, cues_relative], metadata)
-    return translated, metadata
-
-
-def _translate_online(
-    cues: Sequence[Cue],
-    source: str,
-    source_sha: str,
-    workspace: Stage3Workspace,
-    settings: online_translation.Settings,
-) -> tuple[tuple[Cue, ...] | None, dict[str, Any]]:
-    """Translate with the online model the user chose. Network trouble raises TranslationNetworkError (retry later);
-    a missing key, an empty balance or an unknown model pauses the Job until the user fixes it."""
-
-    identity = {
-        "source_video_sha256": source_sha,
-        "source_cues_sha256": identity_hash({"cues": [cue.to_dict() for cue in cues]}),
-        "engine": "online",
-        "base_url": settings.base_url,
-        "model": settings.model,
-        "prompt_sha256": identity_hash({"prompt": online_translation.SYSTEM_PROMPT}),
-        "source_language": source,
-        "target_language": "zh-Hans",
-    }
-    folder = f"stage3/translation/source-{source_sha[:16]}"
-    cues_relative = f"{folder}/translated-cues.json"
-    cache = workspace.load_cache("translation", identity)
-    if cache is not None:
-        metadata = dict(cache.get("metadata") or {})
-        return _cues_from_json(_read_json(workspace.path(cues_relative))["cues"]), {**metadata, "resumed": True}
-    request = make_translation_request(cues, source_language=source, target_language="zh-Hans")
-    request_relative, response_relative = f"{folder}/request.json", f"{folder}/response.json"
-    _write_json(workspace, request_relative, request)
-    try:
-        response = online_translation.translate_request(request, settings)
-    except (online_translation.TranslationNotConfigured, online_translation.TranslationAccountError) as error:
-        return None, {"status": "resource_unavailable", "source_language": source, "target_language": "zh-Hans",
-                      "translation_engine": settings.label, "error_code": None, "error_message": str(error)}
-    _write_json(workspace, response_relative, response)
-    translated = apply_translation_response(cues, response)
-    _write_json(workspace, cues_relative, {"cues": [cue.to_dict() for cue in translated]})
-    metadata = {
-        "status": "translated",
-        "source_language": source,
-        "target_language": "zh-Hans",
-        "translation_engine": settings.label,
         "cue_count": len(translated),
         "resumed": False,
     }
@@ -535,10 +481,8 @@ def run_video_stage3_pipeline(
                     original_cues, source_language, source_sha, workspace,
                     helper=translation_helper,
                 )
-            except online_translation.TranslationNetworkError as error:
-                return _failure(job, job_file, ErrorCode.NETWORK_PAUSED, cause=str(error), provider=online_translation.load_settings().label)
-            except (TranslationRuntimeError, TranslationProtocolError, online_translation.TranslationError, OSError, ValueError) as error:
-                return _failure(job, job_file, ErrorCode.PROVIDER_FAILED, cause=str(error), provider=online_translation.load_settings().label)
+            except (TranslationRuntimeError, TranslationProtocolError, OSError, ValueError) as error:
+                return _failure(job, job_file, ErrorCode.PROVIDER_FAILED, cause=str(error), provider="Apple Translation")
             if chinese_cues is None:
                 code = translation.get("error_code")
                 if code == ErrorCode.TRANSLATION_UNSUPPORTED.value:
@@ -614,10 +558,8 @@ def run_video_stage3_pipeline(
                     original_cues, source_language, source_sha, workspace,
                     helper=translation_helper,
                 )
-            except online_translation.TranslationNetworkError as error:
-                return _failure(job, job_file, ErrorCode.NETWORK_PAUSED, cause=str(error), provider=online_translation.load_settings().label)
-            except (TranslationRuntimeError, TranslationProtocolError, online_translation.TranslationError, OSError, ValueError) as error:
-                return _failure(job, job_file, ErrorCode.PROVIDER_FAILED, cause=str(error), provider=online_translation.load_settings().label)
+            except (TranslationRuntimeError, TranslationProtocolError, OSError, ValueError) as error:
+                return _failure(job, job_file, ErrorCode.PROVIDER_FAILED, cause=str(error), provider="Apple Translation")
             if chinese_cues is None:
                 if translation.get("error_code") == ErrorCode.TRANSLATION_UNSUPPORTED.value:
                     return _failure(job, job_file, ErrorCode.TRANSLATION_UNSUPPORTED, cause=str(translation.get("error_message") or "Unsupported language pair."), provider="Apple Translation")

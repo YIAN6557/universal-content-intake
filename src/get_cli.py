@@ -278,22 +278,8 @@ def _failure(step: str, result: subprocess.CompletedProcess[str], job_file: Path
         detail = f"{error.code.value} {error.message}" if error else ""
     detail = detail or (result.stderr or "").strip()[-300:] or f"退出码 {result.returncode}"
     if step == "stage3-run" and result.returncode == 3:
-        detail = _translation_pause(job_file) or "字幕阶段暂停（多半是缺少翻译语言包，见 系统设置 → 通用 → 语言与地区 → 翻译语言）"
+        detail = "字幕阶段暂停（多半是缺少翻译语言包，见 系统设置 → 通用 → 语言与地区 → 翻译语言）"
     return f"{step} 没有完成：{detail.splitlines()[0][:300]}"
-
-
-def _translation_pause(job_file: Path) -> str:
-    """Why an online translation paused (no key, no balance, unknown model), when that is the reason."""
-
-    try:
-        job = Job.from_json(job_file.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return ""
-    translation = (job.source_metadata.get("stage3") or {}).get("translation") or {}
-    message = str(translation.get("error_message") or "")
-    if not message or "translation_engine" not in translation:
-        return ""
-    return f"字幕翻译暂停：{message}。改好后重新运行同一条命令即可。"
 
 
 # Provider file names that say nothing about the content; delivered under the title instead.
