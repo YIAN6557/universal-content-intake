@@ -17,12 +17,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
+from src.core import compat
 from src.providers.video import DENO_PATH, YTDLP_PATH
 from src.queue.worker import Notifier, macos_notifier
 
 # The interpreter that runs this job is the one the Worker uses (see the LaunchAgent).
 PYTHON = Path(sys.executable)
-DEFAULT_STATE_DIR = Path("~/Library/Application Support/Universal Content Intake/worker").expanduser()
+DEFAULT_STATE_DIR = compat.data_dir() / "worker"
 # "Me at the zoo": the first YouTube upload, stable and public, used only for a
 # metadata probe (no media is downloaded).
 PROBE_URL = "https://www.youtube.com/watch?v=jNQXAC9IVRw"

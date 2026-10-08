@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import logging
 import math
@@ -21,6 +20,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from src.core import compat
 from src.core.errors import CoreError, ErrorCode
 from src.core.job import ContentType, Job, JobState
 from src.core.policies import load_config
@@ -42,13 +42,9 @@ RETRY_STREAK_NOTIFY_AFTER = 3
 
 
 def macos_notifier(title: str, message: str) -> None:
-    """Post a macOS Notification Center banner; never raises into the Worker."""
+    """Post a desktop notification (Notification Center on macOS, a toast on Windows); never raises into the Worker."""
 
-    script = f"display notification {json.dumps(message, ensure_ascii=False)} with title {json.dumps(title, ensure_ascii=False)}"
-    try:
-        subprocess.run(["/usr/bin/osascript", "-e", script], check=False, capture_output=True, timeout=10)
-    except (OSError, subprocess.SubprocessError):
-        pass
+    compat.notify(title, message)
 
 
 def _error_detail(error: QueueApiError) -> str | None:
@@ -261,7 +257,7 @@ class WorkerStateStore:
             fd, temporary_name = tempfile.mkstemp(prefix=".active.", suffix=".tmp", dir=self.directory)
             temporary = Path(temporary_name)
             try:
-                os.fchmod(fd, 0o600)
+                compat.make_private(fd)
                 with os.fdopen(fd, "wb") as handle:
                     handle.write(payload)
                     handle.flush()
@@ -311,9 +307,9 @@ class WorkerFileLock:
         if self.directory.is_symlink() or self.path.is_symlink():
             raise WorkerStateError("Worker lock path cannot traverse a symlink")
         fd = os.open(self.path, os.O_CREAT | os.O_RDWR, 0o600)
-        os.fchmod(fd, 0o600)
+        compat.make_private(fd)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            compat.lock(fd, blocking=False)
         except BlockingIOError:
             os.close(fd)
             return False
@@ -325,7 +321,7 @@ class WorkerFileLock:
         if fd is None:
             return
         try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
+            compat.unlock(fd)
         finally:
             os.close(fd)
 
@@ -421,7 +417,7 @@ class SubprocessCoreRunner:
 
         lock_path = job_file.parent / "temp" / ".core-process.lock"
         fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
-        os.fchmod(fd, 0o600)
+        compat.make_private(fd)
         locked = False
         try:
             while not locked:
@@ -429,7 +425,7 @@ class SubprocessCoreRunner:
                     self._terminate_existing_core(state, job_file)
                     return CoreRunResult(success=False, cancelled=True, local_job_id=state.local_job_id)
                 try:
-                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    compat.lock(fd, blocking=False)
                     locked = True
                 except BlockingIOError:
                     time.sleep(self.process_poll_seconds)
@@ -487,7 +483,7 @@ class SubprocessCoreRunner:
             )
         finally:
             if locked:
-                fcntl.flock(fd, fcntl.LOCK_UN)
+                compat.unlock(fd)
             os.close(fd)
 
     def _run_child(
@@ -676,7 +672,7 @@ class SubprocessCoreRunner:
         fd, temporary_name = tempfile.mkstemp(prefix=".job.", suffix=".tmp", dir=job_file.parent)
         temporary = Path(temporary_name)
         try:
-            os.fchmod(fd, 0o600)
+            compat.make_private(fd)
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 handle.write(content)
                 handle.flush()

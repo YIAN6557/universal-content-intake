@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
+from src.core import compat
 from src.output.delivery import delivered_artifacts
 from src.queue.client import QueueApiError, QueueClient
 from src.queue.worker import WorkerConfig, WorkerConfigError
@@ -25,7 +26,7 @@ from src.queue.worker import WorkerConfig, WorkerConfigError
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "defaults.yaml"
-DEFAULT_WORKER_LOG = Path.home() / "Library" / "Logs" / "Universal Content Intake" / "worker.stderr.log"
+DEFAULT_WORKER_LOG = compat.log_dir() / "worker.stderr.log"
 WORKER_LABEL = "local.universal-content-intake.worker"
 
 # Fallbacks for the Cloud schedule and Cold thresholds; the status API returns

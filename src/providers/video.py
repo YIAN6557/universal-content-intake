@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import math
 import os
 import re
 import shutil
-import site
 import subprocess
 import tempfile
 from dataclasses import asdict, dataclass, field, replace
@@ -18,6 +16,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
+from src.core import compat
 from src.core.job import ContentType, Job
 from src.core.policies import DefaultPolicies, load_default_policies
 from src.media.subtitles import normalize_subtitle_tracks
@@ -35,9 +34,10 @@ from src.providers.base import (
 def locate_tool(name: str, env_var: str, *extra: Path) -> Path:
     """Find an external tool: env override, PATH, then common install places.
 
-    The LaunchAgent Worker runs with a minimal PATH, so Homebrew, pip --user and
-    ~/bin installs are probed explicitly. A missing tool resolves to its bare
-    name and fails later with a clear "not found" error.
+    Background jobs (LaunchAgent, Task Scheduler) run with a minimal PATH, so
+    Homebrew, winget, pip --user and ~/bin installs are probed explicitly. A
+    missing tool resolves to its bare name and fails later with a clear "not
+    found" error.
     """
 
     override = os.environ.get(env_var, "").strip()
@@ -46,11 +46,11 @@ def locate_tool(name: str, env_var: str, *extra: Path) -> Path:
     found = shutil.which(name)
     if found:
         return Path(found)
-    for directory in (Path(site.getuserbase()) / "bin", Path("/opt/homebrew/bin"), Path("/usr/local/bin"),
-                      Path.home() / "bin", *extra):
-        candidate = directory / name
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return candidate
+    for directory in (*compat.tool_dirs(), *extra):
+        for candidate_name in compat.executable_names(name):
+            candidate = directory / candidate_name
+            if compat.is_executable(candidate):
+                return candidate
     return Path(name)
 
 
@@ -67,7 +67,7 @@ MAX_JSON_BYTES = 64 * 1024 * 1024
 
 def _default_yt_dlp_command() -> tuple[str, ...]:
     command = [str(YTDLP_PATH)]
-    if DENO_PATH.is_file() and os.access(DENO_PATH, os.X_OK):
+    if compat.is_executable(DENO_PATH):
         command += ["--js-runtimes", f"deno:{DENO_PATH}"]
     return tuple(command)
 
@@ -1154,7 +1154,7 @@ class VideoProvider(ContentProvider):
             raise ProviderFailure(ProviderFailureKind.FAILED, self.name, "Video Provider workspace lock could not be opened.", details={"cause": str(error)}) from error
         with lock_handle:
             try:
-                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                compat.lock(lock_handle.fileno(), blocking=False)
             except BlockingIOError as error:
                 raise ProviderFailure(ProviderFailureKind.FAILED, self.name, "Another VIDEO attempt is already using this Job workspace.") from error
             try:
@@ -1190,7 +1190,7 @@ class VideoProvider(ContentProvider):
                     authentication=authentication,
                 )
             finally:
-                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+                compat.unlock(lock_handle.fileno())
 
     @staticmethod
     def _write_manifest(path: Path, value: Mapping[str, Any]) -> None:

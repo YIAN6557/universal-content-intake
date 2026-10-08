@@ -39,6 +39,30 @@ def merge_config(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any
     return merged
 
 
+# The shipped defaults name macOS folders; on Windows the same places are spelled differently.
+WINDOWS_DEFAULTS = {
+    "~/Library/Application Support/Universal Content Intake": "%LOCALAPPDATA%/Universal Content Intake",
+    "~/Movies/": "~/Videos/",
+}
+
+
+def _native_defaults(values: dict[str, Any]) -> dict[str, Any]:
+    if os.name != "nt":
+        return values
+
+    def native(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: native(item) for key, item in value.items()}
+        if isinstance(value, str):
+            for mac, windows in WINDOWS_DEFAULTS.items():
+                if value.startswith(mac):
+                    local = os.environ.get("LOCALAPPDATA") or "~/AppData/Local"
+                    return windows.replace("%LOCALAPPDATA%", local.replace("\\", "/")) + value[len(mac):]
+        return value
+
+    return native(values)
+
+
 def load_config(path: Path | str) -> dict[str, Any]:
     """Load a config file; the project defaults also get the user overlay."""
 
@@ -48,6 +72,8 @@ def load_config(path: Path | str) -> dict[str, Any]:
         is_project_defaults = path.resolve() == PROJECT_DEFAULTS_PATH.resolve()
     except OSError:
         is_project_defaults = False
+    if is_project_defaults:
+        values = _native_defaults(values)
     overlay = user_config_path() if is_project_defaults else None
     if overlay is not None and overlay.is_file():
         values = merge_config(values, load_simple_yaml(overlay))

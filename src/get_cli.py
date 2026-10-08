@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import ssl
@@ -228,7 +229,9 @@ def detect(
 
 
 def _run(step: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run([sys.executable, "-m", "src.cli", *step], cwd=PROJECT_ROOT, capture_output=True, text=True, check=False)
+    env = {**os.environ, "PYTHONUTF8": "1"}  # the step's JSON reply is read back as UTF-8 on every system
+    return subprocess.run([sys.executable, "-m", "src.cli", *step], cwd=PROJECT_ROOT, env=env, capture_output=True,
+                          text=True, encoding="utf-8", errors="replace", check=False)
 
 
 def download(
@@ -282,6 +285,8 @@ def _failure(step: str, result: subprocess.CompletedProcess[str], job_file: Path
 # Provider file names that say nothing about the content; delivered under the title instead.
 GENERIC_STEMS = {"final", "article", "source_video", "content"}
 UNSAFE_NAME = re.compile(r'[\\/:*?"<>|\x00-\x1f]+')
+# Names Windows keeps for devices; a file called "CON.mp4" cannot be created there.
+RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL", *(f"COM{n}" for n in range(1, 10)), *(f"LPT{n}" for n in range(1, 10))}
 
 
 def _info_title(info: Path | None) -> str:
@@ -293,7 +298,8 @@ def _info_title(info: Path | None) -> str:
 
 
 def _safe_name(value: str) -> str:
-    return re.sub(r"\s+", " ", UNSAFE_NAME.sub(" ", value)).strip(" .")[:80]
+    name = re.sub(r"\s+", " ", UNSAFE_NAME.sub(" ", value)).strip(" .")[:80].rstrip(" .")
+    return f"_{name}" if name.upper() in RESERVED_NAMES else name
 
 
 def _free(path: Path) -> Path:

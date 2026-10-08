@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from src.core import compat
 from src.core.video_stage3_pipeline import (
     FONT_FILE, PROJECT_ROOT, SMALL_MODEL, TRANSLATION_HELPER, VAD_CLI, VAD_MODEL, WHISPER_CLI, WHISPER_ROOT,
 )
@@ -77,7 +78,7 @@ def _run(command: list[str], timeout: float = 60) -> subprocess.CompletedProcess
 
 
 def _executable(path: Path) -> bool:
-    return path.is_file() and os.access(path, os.X_OK)
+    return compat.is_executable(path)
 
 
 def clasp_path() -> Path:
@@ -110,7 +111,11 @@ def _pip(package: str) -> str:
     return f"{sys.executable} -m pip install --user -U {package}"
 
 
-def _brew_or(package: str, fallback: str) -> str:
+def _brew_or(package: str, fallback: str, winget: str = "") -> str:
+    """How to install a tool here: winget on Windows, Homebrew on a Mac that has it, otherwise ``fallback``."""
+
+    if compat.WINDOWS:
+        return f"winget install --id {winget} -e" if winget else fallback
     return f"brew install {package}" if shutil.which("brew") else fallback
 
 
@@ -129,29 +134,37 @@ def translation_status(source: str = "en", target: str = "zh-Hans") -> tuple[boo
 
 def run_checks(*, deep: bool = True) -> list[Check]:
     checks: list[Check] = []
-    mac = platform.mac_ver()[0]
-    major = int(mac.split(".")[0]) if mac else 0
-    checks.append(Check("macos", "macOS 15 或更新", sys.platform == "darwin" and major >= 15, HUMAN,
-                        f"当前 {mac or sys.platform}", "升级 macOS（Apple 翻译需要 macOS 15+）"))
+    if compat.WINDOWS:
+        build = int(platform.version().split(".")[-1]) if platform.version().split(".")[-1].isdigit() else 0
+        checks.append(Check("windows", "Windows 10 或 11", platform.release() in {"10", "11"} and build >= 17763, HUMAN,
+                            f"当前 Windows {platform.release()}（{platform.version()}）", "升级到 Windows 10（1809 或更新）或 Windows 11"))
+    else:
+        mac = platform.mac_ver()[0]
+        major = int(mac.split(".")[0]) if mac else 0
+        checks.append(Check("macos", "macOS 15 或更新", sys.platform == "darwin" and major >= 15, HUMAN,
+                            f"当前 {mac or sys.platform}", "升级 macOS（Apple 翻译需要 macOS 15+）"))
     checks.append(Check("python", "Python 3.11+", sys.version_info >= (3, 11), HUMAN,
-                        f"{sys.executable} {platform.python_version()}", "从 python.org 安装 Python 3.11 或更新版本"))
+                        f"{sys.executable} {platform.python_version()}",
+                        "运行 winget install --id Python.Python.3.13 -e" if compat.WINDOWS else "从 python.org 安装 Python 3.11 或更新版本"))
     checks.append(Check("certifi", "Python 包 certifi", importlib.util.find_spec("certifi") is not None,
                         fix=_pip("certifi")))
     checks.append(Check("trafilatura", "Python 包 trafilatura（仅文章/网页抓取用）",
                         importlib.util.find_spec("trafilatura") is not None, fix=_pip("trafilatura"), required=False))
-    clt = _run(["/usr/bin/xcode-select", "-p"])
-    checks.append(Check("xcode", "Xcode 命令行工具（含 swift）", bool(clt and clt.returncode == 0) and bool(shutil.which("swift")),
-                        HUMAN, fix="运行 xcode-select --install，在弹窗里点“安装”"))
+    if compat.MAC:
+        clt = _run(["/usr/bin/xcode-select", "-p"])
+        checks.append(Check("xcode", "Xcode 命令行工具（含 swift）", bool(clt and clt.returncode == 0) and bool(shutil.which("swift")),
+                            HUMAN, fix="运行 xcode-select --install，在弹窗里点“安装”"))
     for key, path, fix in (
-        ("ffmpeg", FFMPEG_PATH, _brew_or("ffmpeg", "下载 ffmpeg 静态版放到 ~/bin，或设置 UCI_FFMPEG_PATH")),
-        ("ffprobe", FFPROBE_PATH, _brew_or("ffmpeg", "下载 ffprobe 静态版放到 ~/bin，或设置 UCI_FFPROBE_PATH")),
+        ("ffmpeg", FFMPEG_PATH, _brew_or("ffmpeg", "下载 ffmpeg 静态版放到 ~/bin，或设置 UCI_FFMPEG_PATH", "Gyan.FFmpeg")),
+        ("ffprobe", FFPROBE_PATH, _brew_or("ffmpeg", "下载 ffprobe 静态版放到 ~/bin，或设置 UCI_FFPROBE_PATH", "Gyan.FFmpeg")),
         ("yt-dlp", YTDLP_PATH, _pip('"yt-dlp[default]"')),
-        ("deno", DENO_PATH, _brew_or("deno", "curl -fsSL https://deno.land/install.sh | sh")),
+        ("deno", DENO_PATH, _brew_or("deno", "curl -fsSL https://deno.land/install.sh | sh", "DenoLand.Deno")),
     ):
         checks.append(Check(key, key, _executable(path), detail=str(path) if _executable(path) else "未找到", fix=fix))
     node = shutil.which("node") or str(locate_tool("node", "UCI_NODE_PATH"))
-    checks.append(Check("node", "Node.js（clasp 需要）", _executable(Path(node)), HUMAN if not shutil.which("brew") else AGENT,
-                        fix=_brew_or("node", "从 nodejs.org 下载安装 Node.js LTS")))
+    checks.append(Check("node", "Node.js（clasp 需要）", _executable(Path(node)),
+                        AGENT if compat.WINDOWS or shutil.which("brew") else HUMAN,
+                        fix=_brew_or("node", "从 nodejs.org 下载安装 Node.js LTS", "OpenJS.NodeJS.LTS")))
     clasp = clasp_path()
     checks.append(Check("clasp", "clasp（推送云端代码）", _executable(clasp), detail=str(clasp) if _executable(clasp) else "未找到",
                         fix=_npm_global_fix("@google/clasp")))
@@ -165,27 +178,30 @@ def run_checks(*, deep: bool = True) -> list[Check]:
     checks.append(Check("whisper", "whisper.cpp（语音识别）", whisper_ok, fix=build))
     if not whisper_ok:
         checks.append(Check("cmake", "cmake（编译 whisper.cpp 用）", bool(shutil.which("cmake")),
-                            fix=_brew_or("cmake", _pip("cmake"))))
-    checks.append(Check("translation-helper", "Apple 翻译小工具", _executable(TRANSLATION_HELPER), fix=build))
-    checks.append(Check("pdfinfo-helper", "PDF 信息小工具（仅文档抓取用）", _executable(PDFINFO_DIR / "bin" / "uci-pdfinfo"),
-                        fix=build, required=False))
+                            fix=_brew_or("cmake", _pip("cmake"), "Kitware.CMake")))
+    if compat.MAC:
+        checks.append(Check("translation-helper", "Apple 翻译小工具", _executable(TRANSLATION_HELPER), fix=build))
+        checks.append(Check("pdfinfo-helper", "PDF 信息小工具（仅文档抓取用）", _executable(PDFINFO_DIR / "bin" / "uci-pdfinfo"),
+                            fix=build, required=False))
     checks.append(Check("font", "字幕字体 Noto Sans CJK SC", FONT_FILE.is_file(), detail=str(FONT_FILE.name)))
     # bin/uci only: each content type needs its own downloader. None of these is required.
     for key, label, found, fix in (
         ("gallery-dl", "gallery-dl（下载图片/图集）", shutil.which("gallery-dl") or locate_tool("gallery-dl", "UCI_GALLERY_DL_PATH"), _pip("gallery-dl")),
         ("single-file", "SingleFile CLI（整页保存网页）",
-         os.environ.get("UCI_SINGLE_FILE_PATH") or shutil.which("single-file") or (DEFAULT_SINGLE_FILE_PATH if DEFAULT_SINGLE_FILE_PATH.is_file() else ""),
+         os.environ.get("UCI_SINGLE_FILE_PATH") or (None if compat.WINDOWS else shutil.which("single-file"))
+         or (DEFAULT_SINGLE_FILE_PATH if DEFAULT_SINGLE_FILE_PATH.is_file() else ""),
          f'npm install --prefix "{DEFAULT_SINGLE_FILE_PATH.parents[2]}" single-file-cli@2.15.7'),
-        ("chrome", "Google Chrome（整页保存网页）", os.environ.get("UCI_CHROME_PATH") or "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-         "安装 Google Chrome"),
-        ("aria2c", "aria2（大文件断点续传）", shutil.which("aria2c") or "", _brew_or("aria2", "可选：用于大文件续传")),
-        ("rclone", "rclone（云盘链接）", shutil.which("rclone") or "", _brew_or("rclone", "可选：从 rclone.org 安装")),
+        ("chrome", "Google Chrome（整页保存网页）", os.environ.get("UCI_CHROME_PATH") or compat.chrome_path(),
+         _brew_or("", "安装 Google Chrome", "Google.Chrome") if compat.WINDOWS else "安装 Google Chrome"),
+        ("aria2c", "aria2（大文件断点续传）", shutil.which("aria2c") or "", _brew_or("aria2", "可选：用于大文件续传", "aria2.aria2")),
+        ("rclone", "rclone（云盘链接）", shutil.which("rclone") or "", _brew_or("rclone", "可选：从 rclone.org 安装", "Rclone.Rclone")),
         ("gdown", "gdown（Google 云端硬盘备用）", shutil.which("gdown") or locate_tool("gdown", "UCI_GDOWN_PATH"), _pip("gdown")),
     ):
         path = Path(str(found)) if found else Path("")
-        ok = bool(found) and path.is_file() and os.access(path, os.X_OK)
+        # On Windows SingleFile is a Node script run by node.exe, not an executable of its own.
+        ok = bool(found) and (path.is_file() if key == "single-file" and path.suffix == ".js" else _executable(path))
         checks.append(Check(key, label, ok, AGENT, detail=str(path) if ok else "未安装", fix=fix, required=False))
-    if deep and _executable(TRANSLATION_HELPER):
+    if deep and compat.MAC and _executable(TRANSLATION_HELPER):
         ready, detail = translation_status()
         checks.append(Check("translation-pack", "Apple 翻译语言包（英→简中）", ready, HUMAN, detail,
                             "系统设置 → 通用 → 语言与地区 → 翻译语言，下载“英语”和“中文（简体）”"))

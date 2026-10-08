@@ -6,6 +6,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+from src.core import compat
 from src import get_cli, uci_cli
 from src.setup import cli as setup_cli
 from src.setup import environment, preferences, store
@@ -151,6 +152,7 @@ class WizardStepsTests(TempConfig):
         self.assertEqual(setup_cli.relevant(whisper, preferences.Preferences(False, "ask")), "")
 
 
+@unittest.skipIf(compat.WINDOWS, "LaunchAgents are macOS only; tests/test_compat.py covers Task Scheduler")
 class LaunchAgentOwnershipTests(unittest.TestCase):
     """The agents are per user; a second clone (or a test) must never touch another installation's worker."""
 

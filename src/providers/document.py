@@ -13,7 +13,6 @@ import mimetypes
 import os
 import re
 import shutil
-import site
 import subprocess
 import sys
 import time
@@ -487,8 +486,10 @@ class DocumentProvider(ContentProvider):
         if max_folder_depth < 1 or max_folder_files < 1:
             raise ValueError("invalid DocumentProvider folder bounds")
         runtime = Path(__file__).resolve().parents[2] / "tools" / "document-runtime" / "bin"
-        user_gdown = Path(site.getuserbase()) / "bin" / "gdown"
-        self.curl = self._resolve_executable(curl_executable or os.environ.get("UCI_CURL_PATH"), shutil.which("curl") or "/usr/bin/curl")
+        from src.providers.video import locate_tool
+
+        user_gdown = locate_tool("gdown", "UCI_GDOWN_PATH")
+        self.curl = self._resolve_executable(curl_executable or os.environ.get("UCI_CURL_PATH"), shutil.which("curl") or "curl")
         self.aria2 = self._resolve_executable(aria2_executable or os.environ.get("UCI_ARIA2_PATH"), shutil.which("aria2c") or runtime / "aria2c")
         self.rclone = self._resolve_executable(rclone_executable or os.environ.get("UCI_RCLONE_PATH"), shutil.which("rclone") or runtime / "rclone")
         self.gdown = self._resolve_executable(gdown_executable or os.environ.get("UCI_GDOWN_PATH"), shutil.which("gdown") or user_gdown)
@@ -780,7 +781,7 @@ class DocumentProvider(ContentProvider):
         return status, final_url, headers
 
     def _curl_range_probe(self, url: str) -> tuple[int, dict[str, str], str]:
-        args = [str(self.curl), "--silent", "--show-error", "--location", "--range", "0-0", "--max-filesize", "1024", "--max-redirs", "10", "--connect-timeout", "10", "--max-time", "10", "--dump-header", "-", "--output", "/dev/null", "--write-out", "\nUCI_STATUS=%{http_code}\nUCI_FINAL_URL=%{url_effective}\n", "--", url]
+        args = [str(self.curl), "--silent", "--show-error", "--location", "--range", "0-0", "--max-filesize", "1024", "--max-redirs", "10", "--connect-timeout", "10", "--max-time", "10", "--dump-header", "-", "--output", os.devnull, "--write-out", "\nUCI_STATUS=%{http_code}\nUCI_FINAL_URL=%{url_effective}\n", "--", url]
         try:
             result = self.command_runner(args, capture_output=True, text=True, timeout=15, check=False)
         except (OSError, subprocess.TimeoutExpired) as error:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -16,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterator, Mapping, Sequence
 
+from src.core import compat
 from src.core.errors import CoreError, ErrorCode, RetryMetadata
 from src.core.job import ContentType, Job, JobState, OutputResult
 from src.core.state_machine import StateMachine
@@ -108,11 +108,11 @@ def _job_lock(root: Path) -> Iterator[None]:
     try:
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
             raise OutputFinalizationError("Stage 5 lock is not a regular file")
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        compat.lock(descriptor)
         yield
     finally:
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            compat.unlock(descriptor)
         finally:
             os.close(descriptor)
 

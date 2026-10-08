@@ -18,7 +18,6 @@ never races ``finalize-job``.
 from __future__ import annotations
 
 import errno
-import fcntl
 import hashlib
 import json
 import os
@@ -33,6 +32,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 from zoneinfo import ZoneInfo
 
+from src.core import compat
 from src.output.publish_sheet import render_publish_sheet
 
 
@@ -114,7 +114,7 @@ def deliver_job(job_dir: Path | str, delivery_root: Path | str) -> DeliveryOutco
         return DeliveryOutcome(job_id, "skipped", reason="lock_unavailable")
     try:
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            compat.lock(descriptor, blocking=False)
         except BlockingIOError:
             return DeliveryOutcome(job_id, "skipped", reason="busy")
         try:
@@ -311,7 +311,7 @@ def _sha256(path: Path) -> str:
 def _write_json_atomic(path: Path, value: Mapping[str, Any]) -> None:
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
-        os.fchmod(fd, stat.S_IRUSR | stat.S_IWUSR)
+        compat.make_private(fd)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(value, handle, ensure_ascii=False, sort_keys=True, indent=2)
             handle.write("\n")

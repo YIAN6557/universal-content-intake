@@ -97,7 +97,7 @@ def ensure_first_run(
     prefs = load()
     if prefs.monitoring is None and monitoring_already_configured():
         prefs = save(monitoring=True)
-        out("检测到这台 Mac 已经配置过自动监控，已记为“启用”。")
+        out("检测到这台电脑已经配置过自动监控，已记为“启用”。")
     if prefs.complete:
         return prefs
     if not interactive:

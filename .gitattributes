@@ -1,1 +1,3 @@
+# Windows batch files need CRLF line endings.
+*.cmd text eol=crlf
 /evidence/stage3-real-validation/** export-ignore

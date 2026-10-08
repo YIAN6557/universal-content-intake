@@ -31,13 +31,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Sequence
 
+from src.core import compat
 from src.providers.video import DENO_PATH, locate_tool
 from src.providers.webpage import DEFAULT_SINGLE_FILE_PATH
 
 INTERVAL = timedelta(days=14)
 # The agent fires at the same clock time every day; allow for a run that started a little later last time.
 SLACK = timedelta(hours=12)
-STATE_PATH = Path("~/Library/Application Support/Universal Content Intake/engine-check.json").expanduser()
+STATE_PATH = compat.data_dir() / "engine-check.json"
 VERSION = re.compile(r"\d+(?:\.\d+)+")
 
 Fetcher = Callable[[str], str]
@@ -256,7 +257,7 @@ def report_lines(findings: list[Finding]) -> list[str]:
         else:
             lines.append(f" ✓ {item.label}：{item.installed}，已是最新")
     if not findings:
-        lines.append("这台 Mac 上还没有安装可检查的下载引擎。")
+        lines.append("这台电脑上还没有安装可检查的下载引擎。")
     lines.append("yt-dlp 不在这里：它每周自动更新，并在新版本出问题时自动回滚。")
     return lines
 

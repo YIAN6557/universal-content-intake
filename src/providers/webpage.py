@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import re
-import signal
 import shutil
 import socket
 import ssl
@@ -24,6 +23,7 @@ from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 
 import certifi
 
+from src.core import compat
 from src.core.job import ContentType, Job
 from src.providers.article import _is_login_wall, extract_trafilatura_markdown, parse_html
 from src.providers.base import (
@@ -44,18 +44,10 @@ DEFAULT_TIMEOUT_SECONDS = 30
 DEFAULT_RETRIES = 2
 DEFAULT_RETRY_BACKOFF_SECONDS = 0.25
 MAX_HTML_BYTES = 128 * 1024 * 1024
-DEFAULT_SINGLE_FILE_PATH = (
-    Path.home()
-    / "Library"
-    / "Application Support"
-    / "Universal Content Intake"
-    / "runtime"
-    / "single-file-cli"
-    / "node_modules"
-    / "single-file-cli"
-    / "single-file"
-)
-DEFAULT_CHROME_PATH = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+SINGLE_FILE_PACKAGE = compat.data_dir() / "runtime" / "single-file-cli" / "node_modules" / "single-file-cli"
+# The package's Deno entry runs by its shebang on macOS; Windows has no shebangs, so Node runs its Node entry.
+DEFAULT_SINGLE_FILE_PATH = SINGLE_FILE_PACKAGE / ("single-file-node.js" if compat.WINDOWS else "single-file")
+DEFAULT_CHROME_PATH = compat.chrome_path()
 USER_AGENT = "UniversalContentIntake/1.0 (anonymous webpage; no browser session)"
 ARTICLE_HTML = "article.html"
 ARTICLE_MARKDOWN = "article.md"
@@ -166,7 +158,7 @@ class WebpageProvider(ContentProvider):
         configured_chrome = chrome_executable or os.environ.get("UCI_CHROME_PATH")
         self.single_file_executable = Path(configured_singlefile or DEFAULT_SINGLE_FILE_PATH).expanduser()
         if configured_singlefile is None and not self.single_file_executable.is_file():
-            located = shutil.which("single-file")
+            located = None if compat.WINDOWS else shutil.which("single-file")
             if located:
                 self.single_file_executable = Path(located)
         self.chrome_executable = Path(configured_chrome or DEFAULT_CHROME_PATH).expanduser()
@@ -501,12 +493,23 @@ class WebpageProvider(ContentProvider):
             "engine_version": engine_version,
         }
 
+    def _single_file_needs_node(self) -> bool:
+        return self.single_file_executable.suffix.lower() in {".js", ".mjs"}
+
+    def _single_file_command(self) -> list[str]:
+        if self._single_file_needs_node():
+            from src.providers.video import locate_tool
+
+            return [str(locate_tool("node", "UCI_NODE_PATH")), str(self.single_file_executable)]
+        return [str(self.single_file_executable)]
+
     def _require_single_file(self) -> None:
-        if not self.single_file_executable.is_file() or not os.access(self.single_file_executable, os.X_OK):
+        if not self.single_file_executable.is_file() or not (
+                self._single_file_needs_node() or compat.is_executable(self.single_file_executable)):
             raise ProviderFailure(ProviderFailureKind.FAILED, self.name, "SingleFile CLI is missing or not executable.")
 
     def _require_chrome(self) -> None:
-        if not self.chrome_executable.is_file() or not os.access(self.chrome_executable, os.X_OK):
+        if not compat.is_executable(self.chrome_executable):
             raise ProviderFailure(ProviderFailureKind.FAILED, self.name, "The configured Google Chrome executable is missing or not executable.")
 
     def _run(self, args: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None, timeout: float | None = None) -> subprocess.CompletedProcess[str]:
@@ -527,7 +530,7 @@ class WebpageProvider(ContentProvider):
         if self._single_file_version_cache is not None:
             return self._single_file_version_cache
         try:
-            result = self._run([str(self.single_file_executable), "--version"], cwd=paths.runtime, env=self._child_env(paths))
+            result = self._run([*self._single_file_command(), "--version"], cwd=paths.runtime, env=self._child_env(paths))
             version = (result.stdout or result.stderr).strip().splitlines()
             if result.returncode == 0 and version:
                 self._single_file_version_cache = version[-1].strip()
@@ -539,6 +542,12 @@ class WebpageProvider(ContentProvider):
 
     def _chrome_version(self) -> str:
         if self._chrome_version_cache is not None:
+            return self._chrome_version_cache
+        if compat.WINDOWS:
+            # chrome.exe --version opens a browser window on Windows; the install keeps one folder per version instead.
+            versions = sorted((entry.name for entry in self.chrome_executable.parent.glob("[0-9]*.*") if entry.is_dir()),
+                              key=lambda name: tuple(int(part) for part in name.split(".") if part.isdigit()))
+            self._chrome_version_cache = f"Google Chrome {versions[-1]}" if versions else "unknown"
             return self._chrome_version_cache
         try:
             result = self.command_runner(
@@ -701,7 +710,7 @@ class WebpageProvider(ContentProvider):
         errors_file = paths.runtime / "singlefile-errors.json"
         env = self._child_env(paths)
         args = [
-            str(self.single_file_executable),
+            *self._single_file_command(),
             source_url,
             str(scratch),
             "--browser-headless=true",
@@ -868,7 +877,7 @@ class WebpageProvider(ContentProvider):
             env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True,
+            **compat.new_process_group(),
         )
         deadline = time.monotonic() + timeout_seconds
         previous_stamp: tuple[int, int] | None = None
@@ -911,18 +920,7 @@ class WebpageProvider(ContentProvider):
 
     @staticmethod
     def _stop_process_group(process: subprocess.Popen[str]) -> None:
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            process.wait(timeout=5)
+        compat.stop_process_group(process)
 
     def _validate_pdf(self, path: Path, identity: str) -> None:
         try:

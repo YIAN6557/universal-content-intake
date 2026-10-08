@@ -15,6 +15,7 @@ explains how to answer with ``bin/uci settings``.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from typing import Callable, Sequence
 
@@ -110,7 +111,7 @@ def cmd_status(argv: Sequence[str], *, out: Callable[[str], None] = print) -> in
     from src.queue import engine_check
 
     if not preferences.load().monitoring:
-        out("自动监控没有启用，这台 Mac 只使用下载功能。")
+        out("自动监控没有启用，这台电脑只使用下载功能。")
         out("开启：bin/uci settings --monitoring on")
         code = 0
     else:
@@ -124,7 +125,20 @@ def cmd_status(argv: Sequence[str], *, out: Callable[[str], None] = print) -> in
     return code
 
 
+def _console_setup() -> None:
+    """Windows consoles and pipes may use a legacy code page; never crash on a ✓ or a Chinese title."""
+
+    from src.core import compat
+
+    if compat.WINDOWS:
+        os.environ.setdefault("PYTHONUTF8", "1")
+        for stream in (sys.stdout, sys.stderr):
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(errors="replace")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _console_setup()
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0] in {"help", "-h", "--help"}:
         print(HELP)

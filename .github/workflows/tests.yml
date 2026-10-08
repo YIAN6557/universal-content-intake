@@ -1,0 +1,90 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    name: unit tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+        python: ["3.11", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install trafilatura certifi
+      - run: python -m unittest discover -s tests -p "test_*.py"
+
+  windows-downloads:
+    name: real downloads on Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: cmd
+    env:
+      OUT: ${{ runner.temp }}\uci-out
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install the download engines
+        run: |
+          python -m pip install trafilatura certifi "yt-dlp[default]" gallery-dl || exit /b 1
+          choco install ffmpeg deno -y --no-progress || exit /b 1
+          npm install --prefix "%LOCALAPPDATA%\Universal Content Intake\runtime\single-file-cli" single-file-cli@2.15.7
+      - name: First-run choices and environment check
+        run: |
+          call refreshenv
+          bin\uci settings --monitoring off --subtitles off || exit /b 1
+          bin\uci setup doctor
+          bin\uci help
+      - name: PowerShell can start it too
+        shell: pwsh
+        run: |
+          .\bin\uci.cmd help
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          bin\uci help
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Document
+        run: bin\uci https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf --to "%OUT%"
+      - name: Image
+        run: bin\uci https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png --to "%OUT%"
+      - name: Article
+        run: bin\uci https://en.wikipedia.org/wiki/Windows_10 --to "%OUT%"
+      - name: Web page (SingleFile + Chrome)
+        run: |
+          call refreshenv
+          bin\uci --type webpage https://example.com --to "%OUT%"
+      - name: Video (yt-dlp + ffmpeg)
+        run: |
+          call refreshenv
+          bin\uci https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4 --to "%OUT%"
+      - name: WeChat Channels links are refused with an explanation
+        run: |
+          bin\uci https://weixin.qq.com/sph/AmZAkab0Lb
+          if %ERRORLEVEL% NEQ 2 exit /b 1
+          exit /b 0
+      - name: Delivered files
+        if: always()
+        run: dir /s /b "%OUT%"
+      - name: Maintenance tasks in Task Scheduler
+        run: |
+          bin\uci setup launchagent install || exit /b 1
+          schtasks /Query /TN "\Universal Content Intake\ytdlp-update" || exit /b 1
+          schtasks /Query /TN "\Universal Content Intake\engine-check" || exit /b 1
+          schtasks /Run /TN "\Universal Content Intake\engine-check" || exit /b 1
+          powershell -Command "Start-Sleep -Seconds 60"
+          type "%LOCALAPPDATA%\Universal Content Intake\Logs\engine-check.log"
+          bin\uci setup launchagent uninstall || exit /b 1
+          schtasks /Query /TN "\Universal Content Intake\ytdlp-update" && exit /b 1
+          exit /b 0
+      - name: Notifications do not crash
+        run: python -c "from src.core import compat; compat.notify('UCI', 'test')"
