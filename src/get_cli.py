@@ -68,6 +68,14 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".avif", 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".m3u8", ".flv"}
 ARTICLE_MIN_CHARS = 600
 
+# WeChat Channels (视频号) videos play only inside WeChat; the share page outside it holds a cover and a
+# caption but no video file, and yt-dlp has no extractor for it.
+WECHAT_CHANNELS = (
+    "这是微信视频号的链接。视频号的视频只能在微信里播放，微信外打开的分享页只有简介和封面，"
+    "没有视频文件，所以下载不了。可以在电脑版微信里打开这个视频，用录屏（Cmd+Shift+5，可只录微信窗口）录下来。"
+    "如果只想保存这个分享页，加 --type webpage。"
+)
+
 
 class GetError(RuntimeError):
     """The download cannot continue; the message says why."""
@@ -128,6 +136,18 @@ def parse_request(words: Sequence[str]) -> tuple[str, ContentType | None]:
         names = "、".join(LABELS[item] for item in found)
         raise GetError(f"请求里同时提到了{names}，请只说一种，或用 --type 指定。")
     return link, (found[0] if found else None)
+
+
+def cannot_download(url: str, content_type: ContentType | None) -> str | None:
+    """Why this link cannot be downloaded as ``content_type`` (None: decide from the link), or None if it can."""
+
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    channels = _host_matches(host, ("channels.weixin.qq.com",)) or (
+        host == "weixin.qq.com" and parts.path.startswith("/sph/"))
+    if channels and content_type is not ContentType.WEBPAGE:
+        return WECHAT_CHANNELS
+    return None
 
 
 def _default_probe(url: str) -> Probe:
@@ -374,6 +394,9 @@ def main(argv: list[str] | None = None, *, prog: str = "uci") -> int:
     args = parser.parse_args(argv)
     try:
         url, named = parse_request(args.request)
+        reason = cannot_download(url, TYPE_NAMES[args.type] if args.type else named)
+        if reason:
+            raise GetError(reason)
         if args.type:
             decision = Decision(TYPE_NAMES[args.type], f"指定了 --type {args.type}", True)
         elif named is not None:

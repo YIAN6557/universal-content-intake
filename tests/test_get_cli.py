@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from src.core.job import ContentType
-from src.get_cli import GetError, Probe, deliver, detect, parse_request
+from src.get_cli import GetError, Probe, cannot_download, deliver, detect, parse_request
 
 
 def never_probe(url: str) -> Probe:
@@ -75,6 +75,14 @@ class DetectionTests(unittest.TestCase):
         html = probe("text/html; charset=utf-8", body="<html>…</html>")
         self.assertEqual(detect(url, probe=html, article_chars=lambda _: 2000).content_type, ContentType.ARTICLE)
         self.assertEqual(detect(url, probe=html, article_chars=lambda _: 50).content_type, ContentType.WEBPAGE)
+
+    def test_wechat_channels_videos_are_refused_unless_only_the_page_is_wanted(self) -> None:
+        for url in ("https://weixin.qq.com/sph/AmZAkab0Lb", "https://channels.weixin.qq.com/web/pages/feed?id=1"):
+            for content_type in (None, ContentType.VIDEO, ContentType.IMAGE):
+                self.assertIn("视频号", cannot_download(url, content_type) or "", url)
+            self.assertIsNone(cannot_download(url, ContentType.WEBPAGE))
+        self.assertIsNone(cannot_download("https://mp.weixin.qq.com/s/abc", None))
+        self.assertIsNone(cannot_download("https://www.youtube.com/watch?v=abc", None))
 
 
 class DeliveryTests(unittest.TestCase):
