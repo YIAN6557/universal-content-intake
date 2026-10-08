@@ -32,7 +32,8 @@ def _local_time(value: Any) -> str:
         return ""
     if moment.tzinfo is None:
         return ""
-    return moment.astimezone(TIMEZONE).strftime("%Y-%m-%d %H:%M（北京时间）")
+    # Chinese text stays out of the strftime format: Python 3.11 on Windows cannot encode it there.
+    return moment.astimezone(TIMEZONE).strftime("%Y-%m-%d %H:%M") + "（北京时间）"
 
 
 def _duration(seconds: Any) -> str:
