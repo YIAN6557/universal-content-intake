@@ -45,8 +45,9 @@ DEFAULT_RETRIES = 2
 DEFAULT_RETRY_BACKOFF_SECONDS = 0.25
 MAX_HTML_BYTES = 128 * 1024 * 1024
 SINGLE_FILE_PACKAGE = compat.data_dir() / "runtime" / "single-file-cli" / "node_modules" / "single-file-cli"
-# The package's Deno entry runs by its shebang on macOS; Windows has no shebangs, so Node runs its Node entry.
-DEFAULT_SINGLE_FILE_PATH = SINGLE_FILE_PACKAGE / ("single-file-node.js" if compat.WINDOWS else "single-file")
+DEFAULT_SINGLE_FILE_PATH = SINGLE_FILE_PACKAGE / "single-file"
+# The package's entry is a Deno script; macOS runs it by its shebang, Windows has no shebangs.
+DENO_RUN = ("run", "--allow-read", "--allow-write", "--allow-net", "--allow-env", "--allow-run")
 DEFAULT_CHROME_PATH = compat.chrome_path()
 USER_AGENT = "UniversalContentIntake/1.0 (anonymous webpage; no browser session)"
 ARTICLE_HTML = "article.html"
@@ -493,19 +494,29 @@ class WebpageProvider(ContentProvider):
             "engine_version": engine_version,
         }
 
-    def _single_file_needs_node(self) -> bool:
-        return self.single_file_executable.suffix.lower() in {".js", ".mjs"}
+    def _single_file_runner(self) -> str | None:
+        """The program that runs SingleFile's script, or None when it runs by itself."""
+
+        suffix = self.single_file_executable.suffix.lower()
+        if suffix in {".js", ".mjs"}:
+            return "node"
+        if compat.WINDOWS and not suffix:
+            return "deno"
+        return None
 
     def _single_file_command(self) -> list[str]:
-        if self._single_file_needs_node():
-            from src.providers.video import locate_tool
+        from src.providers.video import DENO_PATH, locate_tool
 
+        runner = self._single_file_runner()
+        if runner == "deno":
+            return [str(DENO_PATH), *DENO_RUN, str(self.single_file_executable)]
+        if runner == "node":
             return [str(locate_tool("node", "UCI_NODE_PATH")), str(self.single_file_executable)]
         return [str(self.single_file_executable)]
 
     def _require_single_file(self) -> None:
         if not self.single_file_executable.is_file() or not (
-                self._single_file_needs_node() or compat.is_executable(self.single_file_executable)):
+                self._single_file_runner() or compat.is_executable(self.single_file_executable)):
             raise ProviderFailure(ProviderFailureKind.FAILED, self.name, "SingleFile CLI is missing or not executable.")
 
     def _require_chrome(self) -> None:
@@ -748,7 +759,7 @@ class WebpageProvider(ContentProvider):
                         self._backoff(attempt)
                         continue
                     raise ProviderFailure(ProviderFailureKind.NETWORK, self.name, f"SingleFile network retries exhausted: {_safe_url(source_url)}", resume_token=identity) from last_failure
-                detail = " ".join((result.stderr or result.stdout or "").split())[-300:]
+                detail = " ".join(f"{result.stderr or ''} {result.stdout or ''}".split())[-300:]
                 raise ProviderFailure(ProviderFailureKind.FAILED, self.name,
                                       "SingleFile CLI failed to save the webpage." + (f" {detail}" if detail else ""), resume_token=identity)
             if not scratch.is_file() or scratch.stat().st_size == 0:

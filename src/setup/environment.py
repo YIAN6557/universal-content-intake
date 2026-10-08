@@ -198,8 +198,8 @@ def run_checks(*, deep: bool = True) -> list[Check]:
         ("gdown", "gdown（Google 云端硬盘备用）", shutil.which("gdown") or locate_tool("gdown", "UCI_GDOWN_PATH"), _pip("gdown")),
     ):
         path = Path(str(found)) if found else Path("")
-        # On Windows SingleFile is a Node script run by node.exe, not an executable of its own.
-        ok = bool(found) and (path.is_file() if key == "single-file" and path.suffix == ".js" else _executable(path))
+        # On Windows SingleFile is a Deno script run by deno.exe, not an executable of its own.
+        ok = bool(found) and (path.is_file() if key == "single-file" and compat.WINDOWS else _executable(path))
         checks.append(Check(key, label, ok, AGENT, detail=str(path) if ok else "未安装", fix=fix, required=False))
     if deep and compat.MAC and _executable(TRANSLATION_HELPER):
         ready, detail = translation_status()
