@@ -83,3 +83,11 @@ jobs:
           exit /b 0
       - name: Notifications do not crash
         run: python -c "from src.core import compat; compat.notify('UCI', 'test')"
+      - name: SingleFile diagnostics
+        if: failure()
+        run: |
+          set "SF=%LOCALAPPDATA%\Universal Content Intake\runtime\single-file-cli\node_modules\single-file-cli"
+          dir "%SF%"
+          node "%SF%\single-file-node.js" --version
+          node "%SF%\single-file-node.js" https://example.com "%RUNNER_TEMP%\sf.html" --browser-headless=true "--browser-executable-path=C:\Program Files\Google\Chrome\Application\chrome.exe"
+          dir "%RUNNER_TEMP%\sf.html"

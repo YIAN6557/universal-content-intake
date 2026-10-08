@@ -564,7 +564,8 @@ class QueueWorkerTests(unittest.TestCase):
         self.store.save(record)
         self.assertEqual(self.store.load(), record)
         mode = self.store.path.stat().st_mode & 0o777
-        self.assertEqual(mode, 0o600)
+        if os.name != "nt":  # Windows has no owner-only mode bits; the user's profile folder is private already
+            self.assertEqual(mode, 0o600)
         payload = json.loads(self.store.path.read_text(encoding="utf-8"))
         self.assertEqual(payload["queue_id"], TASK.queue_id)
         self.assertEqual(payload["worker_state"], "PROCESSING")

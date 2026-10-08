@@ -9,6 +9,8 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
+from urllib.request import url2pathname
 from subprocess import CompletedProcess
 from typing import Any
 from unittest.mock import patch
@@ -107,7 +109,7 @@ class _FakeRuntime:
             output_arg = next(argument for argument in args if argument.startswith("--print-to-pdf="))
             output = Path(output_arg.split("=", 1)[1])
             file_uri = args[-1]
-            html_path = Path(file_uri.removeprefix("file://"))
+            html_path = Path(url2pathname(urlsplit(file_uri).path))
             output.write_bytes(PDF_TEMPLATE.replace(b"{hash}", hashlib.sha256(html_path.read_bytes()).hexdigest().encode("ascii")))
             return CompletedProcess(args, 0, stdout="", stderr="")
         return CompletedProcess(args, 127, stdout="", stderr="unexpected executable")

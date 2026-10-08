@@ -51,7 +51,7 @@ class OutputDeliveryTests(unittest.TestCase):
 
         outcomes = deliver_completed_videos(self.workspace, self.delivery)
 
-        self.assertEqual([item.status for item in outcomes], ["delivered"])
+        self.assertEqual([item.status for item in outcomes], ["delivered"], outcomes)
         destination = outcomes[0].destination
         self.assertRegex(destination.name, r"^\d{4}-\d{2}-\d{2} Hello World Test\.mp4$")
         self.assertEqual(destination.read_bytes(), PAYLOAD)
@@ -104,7 +104,7 @@ class OutputDeliveryTests(unittest.TestCase):
 
         outcome = deliver_job(job_dir, self.delivery)
 
-        self.assertEqual(outcome.status, "delivered")
+        self.assertEqual(outcome.status, "delivered", outcome)
         self.assertEqual(outcome.destination, destination)
         self.assertFalse(source.exists())
         self.assertEqual(sorted(path.name for path in self.delivery.iterdir()),

@@ -748,7 +748,9 @@ class WebpageProvider(ContentProvider):
                         self._backoff(attempt)
                         continue
                     raise ProviderFailure(ProviderFailureKind.NETWORK, self.name, f"SingleFile network retries exhausted: {_safe_url(source_url)}", resume_token=identity) from last_failure
-                raise ProviderFailure(ProviderFailureKind.FAILED, self.name, "SingleFile CLI failed to save the webpage.", resume_token=identity)
+                detail = " ".join((result.stderr or result.stdout or "").split())[-300:]
+                raise ProviderFailure(ProviderFailureKind.FAILED, self.name,
+                                      "SingleFile CLI failed to save the webpage." + (f" {detail}" if detail else ""), resume_token=identity)
             if not scratch.is_file() or scratch.stat().st_size == 0:
                 raise ProviderFailure(ProviderFailureKind.FAILED, self.name, "SingleFile CLI returned success without an HTML artifact.", resume_token=identity)
             if scratch.stat().st_size > MAX_HTML_BYTES:
