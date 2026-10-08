@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import plistlib
 import subprocess
 import tempfile
@@ -66,17 +67,18 @@ class YtDlpUpdaterTests(unittest.TestCase):
         outcome = self.updater(fake).run()
         self.assertEqual(outcome.status, "ROLLED_BACK")
         self.assertEqual(fake.version, "1")
-        self.assertIn(["/py", "-m", "pip", "install", "--user", "--disable-pip-version-check", "--quiet", "yt-dlp[default]==1"], fake.commands)
+        self.assertIn([str(Path("/py")), "-m", "pip", "install", "--user", "--disable-pip-version-check", "--quiet", "yt-dlp[default]==1"], fake.commands)
 
     def test_unchanged_version_does_not_probe(self) -> None:
         fake = FakePip("2", new_version="2", probe_by_version={})
         self.assertEqual(self.updater(fake).run().status, "UNCHANGED")
-        self.assertFalse(any(command[0] == "/yt-dlp" for command in fake.commands))
+        self.assertFalse(any(command[0] == str(Path("/yt-dlp")) for command in fake.commands))
 
     def test_pip_failure_is_reported(self) -> None:
         fake = FakePip("1", new_version="2", probe_by_version={}, upgrade_ok=False)
         self.assertEqual(self.updater(fake).run().status, "FAILED")
 
+    @unittest.skipIf(os.name == "nt", "LaunchAgents are macOS only; tests/test_compat.py covers Task Scheduler")
     def test_launch_agent_runs_weekly_outside_production_window(self) -> None:
         plist = plistlib.loads(render_update_launch_agent_plist(
             project_root=Path("/p"), python_executable=Path("/py"), log_dir=Path("/logs"),

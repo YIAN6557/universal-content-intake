@@ -264,11 +264,7 @@ class WorkerStateStore:
                     os.fsync(handle.fileno())
                 os.replace(temporary, self.path)
                 os.chmod(self.path, 0o600)
-                directory_fd = os.open(self.directory, os.O_RDONLY)
-                try:
-                    os.fsync(directory_fd)
-                finally:
-                    os.close(directory_fd)
+                compat.fsync_dir(self.directory)
             finally:
                 try:
                     temporary.unlink()

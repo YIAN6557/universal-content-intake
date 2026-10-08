@@ -472,7 +472,7 @@ class ImageProvider(ContentProvider):
                 "expected_count": expected_count,
                 "successful_items": successful_items,
                 "failed_items": failures,
-                "manifest_path": str(manifest_path.relative_to(Path(job.workspace_path).resolve())),
+                "manifest_path": manifest_path.relative_to(Path(job.workspace_path).resolve()).as_posix(),
             }
             if successful_items:
                 manifest["status"] = "partial"
@@ -508,7 +508,7 @@ class ImageProvider(ContentProvider):
                 "failed_count": 0,
                 "downloaded_count": downloaded_count,
                 "reused_count": reused_count,
-                "manifest_path": str(manifest_path.relative_to(Path(job.workspace_path).resolve())),
+                "manifest_path": manifest_path.relative_to(Path(job.workspace_path).resolve()).as_posix(),
                 "artifacts": artifacts,
             }},
             artifacts=produced,

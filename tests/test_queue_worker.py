@@ -580,6 +580,7 @@ class QueueWorkerTests(unittest.TestCase):
         self.assertTrue(second.acquire())
         second.release()
 
+    @unittest.skipIf(os.name == "nt", "LaunchAgents are macOS only; tests/test_compat.py covers Task Scheduler")
     def test_launch_agent_is_a_resident_login_worker_and_not_a_two_minute_cron(self) -> None:
         encoded = render_launch_agent_plist(
             project_root=Path("/Applications/UniversalContentIntake"),

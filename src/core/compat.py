@@ -99,6 +99,18 @@ def unlock(fd: int) -> None:
     fcntl.flock(fd, fcntl.LOCK_UN)
 
 
+def fsync_dir(path: Path) -> None:
+    """Make a rename inside ``path`` durable. Windows cannot open a directory for this and does not need it."""
+
+    if WINDOWS:
+        return
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def make_private(fd: int) -> None:
     """Owner-only permissions for a file holding state. Windows user folders are already private."""
 

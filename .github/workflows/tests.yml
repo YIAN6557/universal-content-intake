@@ -40,7 +40,6 @@ jobs:
           npm install --prefix "%LOCALAPPDATA%\Universal Content Intake\runtime\single-file-cli" single-file-cli@2.15.7
       - name: First-run choices and environment check
         run: |
-          call refreshenv
           call bin\uci settings --monitoring off --subtitles off || exit /b 1
           call bin\uci setup doctor
           call bin\uci help
@@ -59,11 +58,9 @@ jobs:
         run: call bin\uci https://en.wikipedia.org/wiki/Windows_10 --to "%RUNNER_TEMP%\uci-out"
       - name: Web page (SingleFile + Chrome)
         run: |
-          call refreshenv
           call bin\uci --type webpage https://example.com --to "%RUNNER_TEMP%\uci-out"
       - name: Video (yt-dlp + ffmpeg)
         run: |
-          call refreshenv
           call bin\uci https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4 --to "%RUNNER_TEMP%\uci-out"
       - name: WeChat Channels links are refused with an explanation
         run: |

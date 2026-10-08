@@ -174,7 +174,7 @@ class _FakeTools:
     def run(self, args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         argv = [str(part) for part in args]
         self.calls.append(argv)
-        executable = Path(argv[0]).name
+        executable = Path(argv[0]).stem  # curl.exe on Windows
         if executable == "curl":
             return subprocess.run(args, **kwargs)
         if executable == "aria2c":

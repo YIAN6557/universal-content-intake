@@ -96,7 +96,7 @@ def create_project(title: str = DEFAULT_TITLE) -> dict[str, str]:
     script_id = str(created.get("scriptId") or "")
     if not script_id:
         raise SetupError("clasp 没有返回脚本 ID。")
-    settings = {"scriptId": script_id, "rootDir": str(CLOUD_DIR.relative_to(PROJECT_ROOT))}
+    settings = {"scriptId": script_id, "rootDir": CLOUD_DIR.relative_to(PROJECT_ROOT).as_posix()}
     if created.get("parentId"):
         settings["parentId"] = created["parentId"]
     CLASP_JSON.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")

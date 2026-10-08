@@ -893,7 +893,7 @@ class DocumentProvider(ContentProvider):
             "etag": headers.get("etag"),
             "last_modified": headers.get("last-modified"),
             "expected_size": expected_size,
-            "partial_path": str(partial.relative_to(paths.temp)),
+            "partial_path": partial.relative_to(paths.temp).as_posix(),
             "transfer_engine": transfer_engine,
             "updated_at": _now(),
         })
@@ -923,7 +923,7 @@ class DocumentProvider(ContentProvider):
                         "etag": headers.get("etag"),
                         "last_modified": headers.get("last-modified"),
                         "expected_size": expected_size,
-                        "partial_path": str(partial.relative_to(paths.temp)),
+                        "partial_path": partial.relative_to(paths.temp).as_posix(),
                         "transfer_engine": transfer_engine,
                         "updated_at": _now(),
                     })
@@ -1030,7 +1030,7 @@ class DocumentProvider(ContentProvider):
             command.extend(["--format", export_format])
         if resume:
             command.append("--continue")
-        self._write_json(paths.state, {"source_identity": pending.identity, "file_id": pending.file_id, "provider": "gdrive", "partial_path": str(target.relative_to(paths.temp)), "updated_at": _now()})
+        self._write_json(paths.state, {"source_identity": pending.identity, "file_id": pending.file_id, "provider": "gdrive", "partial_path": target.relative_to(paths.temp).as_posix(), "updated_at": _now()})
         result = self._run(command, timeout=self.timeout_seconds)
         if result.returncode != 0 or not target.is_file() or target.stat().st_size <= 0:
             self._raise_failure(_classify_text_failure((result.stderr or "") + " " + (result.stdout or "")), "gdown public download failed")

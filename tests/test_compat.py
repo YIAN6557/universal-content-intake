@@ -47,7 +47,8 @@ class PathTests(unittest.TestCase):
             native = policies._native_defaults(values)
         self.assertEqual(native["output"]["delivery_root"], "~/Videos/Universal Content Intake/")
         self.assertEqual(native["worker_state_dir"], "C:/Users/a/AppData/Local/Universal Content Intake/worker")
-        self.assertEqual(policies._native_defaults(values), values if os.name != "nt" else native)
+        if os.name != "nt":
+            self.assertEqual(policies._native_defaults(values), values)
 
     def test_titles_never_become_windows_device_names(self) -> None:
         self.assertEqual(_safe_name("CON"), "_CON")

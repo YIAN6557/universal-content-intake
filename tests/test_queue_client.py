@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import ssl
 import urllib.request
 import tempfile
@@ -329,6 +330,7 @@ class QueueClientTests(unittest.TestCase):
             client = QueueClient.from_defaults(path, secret_provider=FakeSecretProvider(), transport=lambda *_: response(None))
         self.assertEqual(client.api_url, "https://script.google.com/macros/s/test-only/exec")
 
+    @unittest.skipIf(os.name == "nt", "the Keychain adapter is macOS only")
     def test_keychain_adapter_reads_only_from_security_cli_without_exposing_stderr(self) -> None:
         completed = type("Completed", (), {"returncode": 0, "stdout": f"{FAKE_SECRET}\n", "stderr": ""})()
         with patch("src.queue.secrets.subprocess.run", return_value=completed) as run:

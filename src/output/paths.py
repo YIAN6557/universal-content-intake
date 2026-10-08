@@ -45,7 +45,7 @@ class ContentDeliverable:
 
     @classmethod
     def from_paths(cls, paths: Iterable[str]) -> "ContentDeliverable":
-        normalized = tuple(str(_require_relative_path(path)) for path in paths)
+        normalized = tuple(_require_relative_path(path).as_posix() for path in paths)
         if not normalized:
             raise OutputContractError("a Content Deliverable must contain at least one file")
         return cls(normalized)

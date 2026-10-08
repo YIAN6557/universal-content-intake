@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import hashlib
 import json
 import tempfile
@@ -74,8 +75,9 @@ class _Server:
 
 class _FakeRuntime:
     def __init__(self, root: Path, *, html: bytes = PAGE_HTML) -> None:
-        self.single_file = root / "single-file-fixture"
-        self.chrome = root / "chrome-fixture"
+        suffix = ".exe" if os.name == "nt" else ""  # what counts as a program on Windows
+        self.single_file = root / f"single-file-fixture{suffix}"
+        self.chrome = root / f"chrome-fixture{suffix}"
         self.single_file.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         self.chrome.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         self.single_file.chmod(0o755)

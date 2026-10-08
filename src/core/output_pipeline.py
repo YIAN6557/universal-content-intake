@@ -350,7 +350,7 @@ def _plan_output_names(job: Job, output_root: Path, records: list[dict[str, Any]
                 planned = [{**records[0], "output_path": f"content/{names[base][0]}"}]
             else:
                 role_name = {"html": "article.html", "markdown": "article.md", "pdf": "article.pdf"}
-                planned = [{**record, "output_path": f"content/{names[base][("article.html", "article.md", "article.pdf").index(role_name[str(record["role"])])]}"} for record in records]
+                planned = [{**record, "output_path": "content/" + names[base][("article.html", "article.md", "article.pdf").index(role_name[str(record["role"])])]} for record in records]
         else:
             planned = []
             for record in records:
