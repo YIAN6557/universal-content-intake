@@ -18,6 +18,7 @@ from pathlib import Path
 
 WINDOWS = os.name == "nt"
 MAC = sys.platform == "darwin"
+EXE = ".exe" if WINDOWS else ""
 APP_NAME = "Universal Content Intake"
 
 

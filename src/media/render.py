@@ -115,7 +115,8 @@ def build_ass_document(
 
 
 def _filter_path(path: Path) -> str:
-    value = str(path.resolve())
+    # Forward slashes on Windows too ("C\\:/Users/…"): ffmpeg's filter syntax treats backslashes as escapes.
+    value = path.resolve().as_posix()
     return value.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace(",", "\\,")
 
 

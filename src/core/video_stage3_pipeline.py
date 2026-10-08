@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from src.core import compat
 from src.core.errors import CoreError, ErrorCode
 from src.core.job import Job, JobState
 from src.core.state_machine import RECOVERABLE_ERROR_STATES, StateMachine
@@ -27,8 +28,8 @@ from src.providers.video import FFMPEG_PATH, FFPROBE_PATH, VideoProvider
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WHISPER_ROOT = PROJECT_ROOT / "tools" / "whisper.cpp"
-WHISPER_CLI = WHISPER_ROOT / "bin" / "whisper-cli"
-VAD_CLI = WHISPER_ROOT / "bin" / "whisper-vad-speech-segments"
+WHISPER_CLI = WHISPER_ROOT / "bin" / f"whisper-cli{compat.EXE}"
+VAD_CLI = WHISPER_ROOT / "bin" / f"whisper-vad-speech-segments{compat.EXE}"
 # Project-owned copy (identical SHA-256 to the model validated in Stage 3), so
 # an update or removal of another app cannot break ASR.
 SMALL_MODEL = Path(os.environ.get(
