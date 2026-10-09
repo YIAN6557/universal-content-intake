@@ -363,9 +363,18 @@ def subtitle_tools_missing() -> list[str]:
     missing = [model.path.name for model in environment.MODELS if not model.path.is_file()]
     if not (environment.WHISPER_CLI.is_file() and environment.VAD_CLI.is_file()):
         missing.append("whisper.cpp")
-    if not environment.TRANSLATION_HELPER.is_file():
+    if translation_missing() is None and not environment.TRANSLATION_HELPER.is_file():
         missing.append("Apple 翻译小工具")
     return missing
+
+
+def translation_missing() -> str | None:
+    """None when Apple Translation is the engine; otherwise what the online model still needs ("" = ready)."""
+
+    from src.media import online_translation
+
+    settings = online_translation.load_settings()
+    return None if settings.engine == "apple" else online_translation.configured(settings)
 
 
 def decide_subtitles(
@@ -435,6 +444,9 @@ def main(argv: list[str] | None = None, *, prog: str = "uci") -> int:
             if chinese and subtitle_tools_missing():
                 raise GetError("翻译压制需要的语音识别模型和翻译工具还没装（" + "、".join(subtitle_tools_missing())
                                + "）。先运行 bin/uci setup build-tools，或这次加 --no-zh 只下载原视频。")
+            if chinese and translation_missing():
+                raise GetError(f"字幕翻译用的在线模型还没配置好：{translation_missing()}。"
+                               "运行 bin/uci setup translation use deepseek（或 qwen）按提示配置，或这次加 --no-zh 只下载原视频。")
         elif args.zh or args.no_zh:
             print("提示：--zh / --no-zh 只对视频有效，已忽略。")
         if args.dry_run:

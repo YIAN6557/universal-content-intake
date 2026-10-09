@@ -91,3 +91,58 @@ jobs:
           dir "%SF%"
           "%USERPROFILE%\.deno\bin\deno.exe" run --allow-read --allow-write --allow-net --allow-env --allow-run "%SF%\single-file" https://example.com "%RUNNER_TEMP%\sf.html" --browser-headless=true "--browser-executable-path=C:\Program Files\Google\Chrome\Application\chrome.exe"
           dir "%RUNNER_TEMP%\sf.html"
+
+  windows-subtitles:
+    name: Chinese subtitles on Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/cache@v4
+        with:
+          path: models/*.bin
+          key: whisper-models-small-silero-v6.2.0
+      - name: Install the download engines
+        run: |
+          python -m pip install trafilatura certifi "yt-dlp[default]" || exit /b 1
+          choco install ffmpeg -y --no-progress || exit /b 1
+      - name: Turn subtitles on and install speech recognition
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          call bin\uci settings --monitoring off --subtitles on || exit /b 1
+          call bin\uci setup build-tools || exit /b 1
+      - name: Use a stand-in for the translation API (CI has no real key)
+        run: |
+          start "" /b python tests\fixtures\fake_translation_server.py 8765
+          powershell -NoProfile -Command "Start-Sleep -Seconds 3"
+          call bin\uci setup translation use deepseek --base-url http://127.0.0.1:8765 --model stand-in || exit /b 1
+          echo sk-test| bin\uci setup translation key || exit /b 1
+          call bin\uci setup doctor
+          exit /b 0
+      - name: A short English speech video
+        run: |
+          mkdir "%RUNNER_TEMP%\media"
+          curl -sSfL -o "%RUNNER_TEMP%\media\jfk.wav" https://raw.githubusercontent.com/ggml-org/whisper.cpp/master/samples/jfk.wav || exit /b 1
+          ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=navy:s=640x360:r=25 -i "%RUNNER_TEMP%\media\jfk.wav" -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac "%RUNNER_TEMP%\media\jfk.mp4" || exit /b 1
+          start "" /b python -m http.server 8766 --bind 127.0.0.1 --directory "%RUNNER_TEMP%\media"
+          powershell -NoProfile -Command "Start-Sleep -Seconds 3"
+      - name: Download, recognise, translate and burn in
+        run: |
+          call bin\uci http://127.0.0.1:8766/jfk.mp4 --zh --to "%RUNNER_TEMP%\uci-zh" || exit /b 1
+          dir /s /b "%RUNNER_TEMP%\uci-zh"
+          for %%f in ("%RUNNER_TEMP%\uci-zh\*.mp4") do set "VIDEO=%%f"
+          ffprobe -hide_banner -loglevel error -show_entries stream=codec_type,width,height -of compact "%VIDEO%" || exit /b 1
+          ffmpeg -hide_banner -loglevel error -ss 5 -i "%VIDEO%" -frames:v 1 "%RUNNER_TEMP%\uci-zh\frame.png" || exit /b 1
+          type "%RUNNER_TEMP%\uci-zh\*.md"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-subtitle-frame
+          path: ${{ runner.temp }}/uci-zh/frame.png
+          if-no-files-found: ignore

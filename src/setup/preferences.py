@@ -119,6 +119,11 @@ def ensure_first_run(
         prefs = save(subtitles=str(_ask(SUBTITLE_QUESTION, {"1": "on", "2": "off", "3": "ask"}, read, out)))
         out("")
     out(f"已保存：自动监控 {'启用' if prefs.monitoring else '不启用'}；视频翻译压制 {SUBTITLE_LABELS[prefs.subtitles]}。")
+    if prefs.subtitles != "off":
+        from src.setup import translation_setup
+
+        out("")
+        translation_setup.offer(interactive=True, read=read, out=out)
     return prefs
 
 

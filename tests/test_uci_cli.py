@@ -41,8 +41,10 @@ class FirstRunTests(TempConfig):
 
     def test_interactive_first_run_saves_both_choices(self) -> None:
         lines: list[str] = []
-        prefs = preferences.ensure_first_run(interactive=True, read=self.answers("maybe", "n", "3"), out=lines.append)
+        # The last "n" declines connecting an online translation model for now.
+        prefs = preferences.ensure_first_run(interactive=True, read=self.answers("maybe", "n", "3", "n"), out=lines.append)
         self.assertEqual((prefs.monitoring, prefs.subtitles), (False, "ask"))
+        self.assertTrue(any("DeepSeek" in line for line in lines))
         self.assertEqual(preferences.load(), prefs)
         self.assertTrue(any("请输入方括号里的选项" in line for line in lines))
         # Asked once only.
@@ -51,7 +53,7 @@ class FirstRunTests(TempConfig):
     def test_an_installation_with_monitoring_already_set_up_is_only_asked_about_subtitles(self) -> None:
         store.update_user_config({"queue_api_url": "https://script.google.com/macros/s/x/exec"})
         lines: list[str] = []
-        prefs = preferences.ensure_first_run(interactive=True, read=self.answers("1"), out=lines.append)
+        prefs = preferences.ensure_first_run(interactive=True, read=self.answers("1", "n"), out=lines.append)
         self.assertEqual((prefs.monitoring, prefs.subtitles), (True, "on"))
         self.assertFalse(any("问题 1" in line for line in lines))
 

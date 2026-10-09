@@ -40,6 +40,7 @@ INTERVAL = timedelta(days=14)
 SLACK = timedelta(hours=12)
 STATE_PATH = compat.data_dir() / "engine-check.json"
 VERSION = re.compile(r"\d+(?:\.\d+)+")
+BUILD_TAG = re.compile(r"b(\d+)")
 
 Fetcher = Callable[[str], str]
 
@@ -51,6 +52,7 @@ class Engine:
     repo: str
     installed: Callable[[], str | None]
     update: Callable[[str], str]  # latest version -> how to update
+    latest: Callable[[], str] | None = None  # when the newest GitHub release is not the one to compare with
 
 
 @dataclass(frozen=True)
@@ -67,7 +69,10 @@ class Finding:
 
 def parse_version(text: str | None) -> tuple[int, ...] | None:
     match = VERSION.search(text or "")
-    return tuple(int(part) for part in match.group(0).split(".")) if match else None
+    if match:
+        return tuple(int(part) for part in match.group(0).split("."))
+    build = BUILD_TAG.fullmatch((text or "").strip())  # whisper.cpp's Windows builds are tagged b5454, b5455, …
+    return (int(build.group(1)),) if build else None
 
 
 def is_newer(latest: str | None, installed: str | None) -> bool:
@@ -145,7 +150,10 @@ ENGINES: tuple[Engine, ...] = (
            lambda: _cli_version(DENO_PATH, "--version"), _deno_update),
     Engine("whisper.cpp", "whisper.cpp（语音识别，翻译压制用）", "ggml-org/whisper.cpp", _whisper_cpp,
            lambda latest: "bin/uci setup build-tools --skip-models --skip-swift --update-whisper"
-                          "（编译新版本，用自带测试录音自检通过才替换，失败保留旧版本；约 2–5 分钟）"),
+                          + ("（下载新版本，用自带测试录音自检通过才替换，失败保留旧版本）" if compat.WINDOWS
+                             else "（编译新版本，用自带测试录音自检通过才替换，失败保留旧版本；约 2–5 分钟）"),
+           # Windows uses the prebuilt binaries, which come in build releases (b5454, …), not the vX.Y.Z ones.
+           (lambda: __import__("src.setup.environment", fromlist=["x"]).latest_windows_build()[0]) if compat.WINDOWS else None),
 )
 
 
@@ -192,7 +200,7 @@ def check(engines: Sequence[Engine] = ENGINES, fetch: Fetcher = latest_release) 
         if installed is None:
             continue  # not installed here: nothing to keep up to date
         try:
-            tag = fetch(engine.repo)
+            tag = engine.latest() if engine.latest else fetch(engine.repo)
         except (OSError, RuntimeError, ValueError) as error:
             findings.append(Finding(engine.key, engine.label, engine.repo, installed, None, False, error=str(error) or type(error).__name__))
             continue

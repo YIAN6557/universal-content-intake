@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from src.core import compat
 from src.core.policies import PROJECT_DEFAULTS_PATH, load_config
 from src.queue.client import QueueApiError
 from src.queue.status_cli import WORKER_LABEL
@@ -98,12 +99,12 @@ def maintenance_installed() -> bool:
 def build_steps(ctx: Context) -> list[Step]:
     by_key = {check.key: check for check in ctx.checks}
     prefs = ctx.prefs
-    env_keys = ("macos", "python", "certifi", "ffmpeg", "ffprobe", "yt-dlp", "deno")
-    if prefs.needs_subtitle_tools:
+    env_keys = ("macos", "windows", "python", "certifi", "ffmpeg", "ffprobe", "yt-dlp", "deno")
+    if prefs.needs_subtitle_tools and compat.MAC:
         env_keys += ("xcode", "cmake")
     if prefs.monitoring:
         env_keys += ("node", "clasp")
-    tool_keys = ("model:ggml-small.bin", "model:ggml-silero-v6.2.0.bin", "whisper", "translation-helper", "font")
+    tool_keys = ("model:ggml-small.bin", "model:ggml-silero-v6.2.0.bin", "whisper", "translation-helper", "font")  # helper: Apple only
     env_checks = [by_key[key] for key in env_keys if key in by_key]
     tool_checks = [by_key[key] for key in tool_keys if key in by_key]
     state, ids, info = ctx.state, ctx.ids, ctx.inspect or {}
@@ -111,17 +112,29 @@ def build_steps(ctx: Context) -> list[Step]:
     properties = info.get("properties") or {}
     steps: list[Step] = []
 
-    env_parts = "Python、ffmpeg、yt-dlp、deno" + ("、Xcode 工具" if prefs.needs_subtitle_tools else "") + ("、Node、clasp" if prefs.monitoring else "")
-    steps.append(Step("env", f"本机环境：{env_parts}", f"{AGENT}（Xcode 工具需{HUMAN}点确认）" if prefs.needs_subtitle_tools else AGENT,
+    xcode = prefs.needs_subtitle_tools and compat.MAC
+    env_parts = "Python、ffmpeg、yt-dlp、deno" + ("、Xcode 工具" if xcode else "") + ("、Node、clasp" if prefs.monitoring else "")
+    steps.append(Step("env", f"本机环境：{env_parts}", f"{AGENT}（Xcode 工具需{HUMAN}点确认）" if xcode else AGENT,
                       all(check.ok for check in env_checks if check.required), guide=_check_lines(env_checks)))
     if prefs.needs_subtitle_tools:
-        steps.append(Step("tools", "翻译压制工具：Whisper 语音识别模型、whisper.cpp、Apple 翻译小工具", AGENT,
+        online = translation_setup.online.load_settings()
+        apple = online.engine == "apple"
+        steps.append(Step("tools", "翻译压制工具：Whisper 语音识别模型、whisper.cpp" + ("、Apple 翻译小工具" if apple else ""), AGENT,
                           all(check.ok for check in tool_checks),
-                          guide=["运行 bin/uci setup build-tools（下载约 490 MB 模型并校验 SHA-256，编译 whisper.cpp 和 Swift 小工具）"]))
-        ready, detail = environment.translation_status()
-        steps.append(Step("translation", "Apple 翻译语言包（英→简中）", HUMAN, ready, detail=detail, guide=[
-            "系统设置 → 通用 → 语言与地区 → 翻译语言，下载“英语”和“中文（简体）”。",
-            "下载完成后重新运行 bin/uci setup 核对。"]))
+                          guide=["运行 bin/uci setup build-tools（下载约 490 MB 模型并校验 SHA-256，"
+                                 + ("编译 whisper.cpp 和 Swift 小工具）" if compat.MAC else "下载 whisper.cpp 的 Windows 版并自检）")]))
+        if apple:
+            ready, detail = environment.translation_status()
+            steps.append(Step("translation", "Apple 翻译语言包（英→简中）", HUMAN, ready, detail=detail, guide=[
+                "系统设置 → 通用 → 语言与地区 → 翻译语言，下载“英语”和“中文（简体）”。",
+                "下载完成后重新运行 bin/uci setup 核对。",
+                "（也可以改用在线模型：bin/uci setup translation use deepseek）"]))
+        else:
+            missing = translation_setup.online.configured(online)
+            steps.append(Step("translation", "在线翻译模型：DeepSeek（默认）或通义千问，申请并保存 API Key", HUMAN, not missing,
+                              detail=online.label if not missing else missing, guide=[
+                "1.（本人）选模型并按提示申请 Key：bin/uci setup translation use deepseek（或 qwen）",
+                "2.（本人）在终端运行 bin/uci setup translation key，粘贴 Key；会先用一句话试翻译，成功才保存。"]))
     if not prefs.monitoring:
         steps.append(Step("maintenance", "下载引擎的定期维护：每周自动更新 yt-dlp，每两周检查其他引擎有没有新版本", AGENT,
                           maintenance_installed(), guide=["运行 bin/uci setup launchagent install（只装这两个定时任务，不装自动监控的后台程序）"]))
@@ -253,7 +266,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 # Checks that only matter for one of the optional features.
 SUBTITLE_ONLY_CHECKS = {"xcode", "cmake", "model:ggml-small.bin", "model:ggml-silero-v6.2.0.bin", "whisper",
-                        "translation-helper", "font", "translation-pack"}
+                        "translation-helper", "font", "translation-pack", "translation-model"}
 MONITORING_ONLY_CHECKS = {"node", "clasp"}
 
 

@@ -53,8 +53,6 @@ def use(provider_key: str, *, model: str = "", base_url: str = "", out: Out = pr
     if provider_key not in online.PROVIDERS:
         raise RuntimeError(f"没有这个选项：{provider_key}。可选：{', '.join(online.RECOMMENDED)}")
     provider = online.PROVIDERS[provider_key]
-    if provider_key == "custom" and not (model and base_url):
-        raise RuntimeError("“其他”需要同时给出 --base-url 和 --model")
     section = {"engine": "online", "provider": provider_key, "model": model or provider.model,
                "base_url": base_url or provider.base_url}
     store.update_user_config({"translation": section})
@@ -123,13 +121,7 @@ def wizard(*, read: Callable[[str], str] = input, secret: Callable[[str], str] =
         if answer.isdigit() and 1 <= int(answer) <= len(online.RECOMMENDED):
             break
     key = online.RECOMMENDED[int(answer) - 1]
-    model = base_url = ""
-    if key == "custom":
-        base_url = read("API 地址（base URL）> ").strip()
-        model = read("模型名 > ").strip()
-    elif key == "doubao":
-        model = read(f"模型 ID（直接回车 = {online.PROVIDERS[key].model}）> ").strip()
-    settings = use(key, model=model, base_url=base_url, out=out)
+    settings = use(key, out=out)
     out("")
     for line in guide_lines(online.PROVIDERS[key])[:-2]:
         out(line)
@@ -149,13 +141,13 @@ def offer(*, interactive: bool, read: Callable[[str], str] = input, out: Out = p
         return
     if compat.WINDOWS:
         out("字幕要翻译成中文，需要接一个在线翻译模型（Windows 没有 Mac 那样的系统自带翻译）。")
-        out("国内的 DeepSeek、通义千问、豆包、智谱都可以，费用很低，智谱的免费模型也能用。")
+        out("可以选 DeepSeek（推荐，很便宜）或通义千问（新用户有免费额度）。")
         question = "现在接入吗？[y] 现在接  [n] 以后再说（以后运行 bin/uci setup translation）> "
     else:
-        out("字幕默认用 Mac 自带的 Apple 翻译（免费、离线）。也可以接一个在线模型（DeepSeek、通义千问等），翻译更自然，费用很低。")
+        out("字幕默认用 Mac 自带的 Apple 翻译（免费、离线）。也可以接一个在线模型（DeepSeek 或通义千问），翻译更自然，费用很低。")
         question = "要接在线模型吗？[y] 现在接  [n] 先用 Apple 翻译（以后可运行 bin/uci setup translation）> "
     if not interactive:
-        out("需要接入时运行：bin/uci setup translation list（看可选模型），再运行 bin/uci setup translation use <名字>")
+        out("需要接入时运行：bin/uci setup translation use deepseek（或 qwen），按提示申请并保存 Key。")
         return
     if read(question).strip().lower() in {"y", "yes"}:
         out("")
@@ -167,8 +159,9 @@ def main(argv: list[str]) -> int:
     parser.add_argument("action", nargs="?", default="status",
                         choices=("status", "list", "use", "key", "test", "apple", "wizard"))
     parser.add_argument("provider", nargs="?", help="use：" + " / ".join(online.RECOMMENDED))
-    parser.add_argument("--model", default="", help="模型名（不填用推荐的）")
-    parser.add_argument("--base-url", default="", help="API 地址（只有“custom”需要）")
+    # Only needed if a provider renames its model or moves its API address.
+    parser.add_argument("--model", default="", help="模型名（不填用默认的）")
+    parser.add_argument("--base-url", default="", help="API 地址（不填用默认的）")
     args = parser.parse_args(argv)
     interactive = sys.stdin.isatty()
     if args.action == "status":
@@ -179,13 +172,13 @@ def main(argv: list[str]) -> int:
             print("\n可选的模型：")
             for line in choices_text():
                 print(line)
-            print("\n选一个：bin/uci setup translation use deepseek（或 qwen / doubao / glm / custom）")
+            print("\n选一个：bin/uci setup translation use deepseek（或 qwen）")
         return 0
     if args.action == "list":
         print("可选的翻译模型：")
         for line in choices_text():
             print(line)
-        print("\n选一个：bin/uci setup translation use <名字>，名字依次是：" + "、".join(online.RECOMMENDED))
+        print("\n选一个：bin/uci setup translation use deepseek（或 qwen）")
         return 0
     if args.action == "wizard":
         if not interactive:

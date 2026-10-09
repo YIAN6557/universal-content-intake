@@ -14,6 +14,7 @@ import sys
 import tarfile
 import tempfile
 import urllib.request
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -176,11 +177,20 @@ def run_checks(*, deep: bool = True) -> list[Check]:
                             detail="SHA-256 已校验" if ok and deep else ("文件不完整或校验失败" if present else "未下载"), fix=build))
     whisper_ok = _executable(WHISPER_CLI) and _executable(VAD_CLI)
     checks.append(Check("whisper", "whisper.cpp（语音识别）", whisper_ok, fix=build))
-    if not whisper_ok:
+    if not whisper_ok and compat.MAC:  # Windows downloads ready-made binaries
         checks.append(Check("cmake", "cmake（编译 whisper.cpp 用）", bool(shutil.which("cmake")),
                             fix=_brew_or("cmake", _pip("cmake"), "Kitware.CMake")))
-    if compat.MAC:
+    from src.media import online_translation
+
+    translation = online_translation.load_settings()
+    if translation.engine == "online":
+        missing = online_translation.configured(translation)
+        checks.append(Check("translation-model", "在线翻译模型（字幕翻译用）", not missing, HUMAN,
+                            translation.label if not missing else missing,
+                            "运行 bin/uci setup translation use deepseek（或 qwen），按提示申请并保存 API Key"))
+    elif compat.MAC:
         checks.append(Check("translation-helper", "Apple 翻译小工具", _executable(TRANSLATION_HELPER), fix=build))
+    if compat.MAC:
         checks.append(Check("pdfinfo-helper", "PDF 信息小工具（仅文档抓取用）", _executable(PDFINFO_DIR / "bin" / "uci-pdfinfo"),
                             fix=build, required=False))
     checks.append(Check("font", "字幕字体 Noto Sans CJK SC", FONT_FILE.is_file(), detail=str(FONT_FILE.name)))
@@ -201,7 +211,7 @@ def run_checks(*, deep: bool = True) -> list[Check]:
         # On Windows SingleFile is a Deno script run by deno.exe, not an executable of its own.
         ok = bool(found) and (path.is_file() if key == "single-file" and compat.WINDOWS else _executable(path))
         checks.append(Check(key, label, ok, AGENT, detail=str(path) if ok else "未安装", fix=fix, required=False))
-    if deep and compat.MAC and _executable(TRANSLATION_HELPER):
+    if deep and translation.engine == "apple" and _executable(TRANSLATION_HELPER):
         ready, detail = translation_status()
         checks.append(Check("translation-pack", "Apple 翻译语言包（英→简中）", ready, HUMAN, detail,
                             "系统设置 → 通用 → 语言与地区 → 翻译语言，下载“英语”和“中文（简体）”"))
@@ -276,11 +286,12 @@ def whisper_self_test(bin_dir: Path, sample: Path, workdir: Path) -> str:
     if not (SMALL_MODEL.is_file() and VAD_MODEL.is_file()):
         raise RuntimeError("缺少语音识别模型，先运行 bin/uci setup build-tools")
     try:
-        vad = run_silero_vad(sample, vad_binary=bin_dir / "whisper-vad-speech-segments", vad_model=VAD_MODEL, timeout_seconds=120)
+        vad = run_silero_vad(sample, vad_binary=bin_dir / f"whisper-vad-speech-segments{compat.EXE}", vad_model=VAD_MODEL,
+                             timeout_seconds=120)
         speech = vad.speech_duration_seconds
         if not 5 <= speech <= 11.5:  # the sample is 11 s, almost all speech
             raise RuntimeError(f"人声检测结果不对：识别出 {speech:.1f} 秒人声，应为 5–11 秒")
-        result = transcribe_with_whisper_cpp(sample, whisper_binary=bin_dir / "whisper-cli", model_path=SMALL_MODEL,
+        result = transcribe_with_whisper_cpp(sample, whisper_binary=bin_dir / f"whisper-cli{compat.EXE}", model_path=SMALL_MODEL,
                                              output_base=workdir / "self-test", timeout_seconds=600)
     except ASRRuntimeError as error:
         raise RuntimeError(f"运行失败：{error}") from None
@@ -322,7 +333,10 @@ def build_whisper(*, update: bool = False, log: Callable[[str], None] = print) -
 
     current = installed_whisper_version()
     if current and not update:
-        log(f"✓ whisper.cpp 已编译（{current}）")
+        log(f"✓ whisper.cpp 已安装（{current}）")
+        return
+    if compat.WINDOWS:
+        _update_windows_whisper(current, log)
         return
     cmake = shutil.which("cmake") or str(locate_tool("cmake", "UCI_CMAKE_PATH"))
     if not _executable(Path(cmake)):
@@ -353,6 +367,88 @@ def build_whisper(*, update: bool = False, log: Callable[[str], None] = print) -
     raise RuntimeError(f"whisper.cpp 没有安装成功（{failure}）" + (f"；已保留原来的 {current}" if current else ""))
 
 
+# --- Windows: whisper.cpp's prebuilt binaries ---------------------------------
+
+WINDOWS_WHISPER_ASSET = "whisper-bin-win-cpu-arm64.zip" if platform.machine().lower() in {"arm64", "aarch64"} else "whisper-bin-x64.zip"
+# The last build known to pass whisper_self_test on Windows; used when GitHub's API cannot be reached
+# (it allows 60 anonymous requests an hour) and nothing is installed yet.
+WINDOWS_FALLBACK_BUILD = ("b5454", "d1be6fde11ac6e0407606b4e42fe72d34add8037")
+
+
+def windows_build_url(tag: str) -> str:
+    return f"https://github.com/{WHISPER_REPO}/releases/download/{tag}/{WINDOWS_WHISPER_ASSET}"
+
+
+def latest_windows_build() -> tuple[str, str, str]:
+    """Tag, download URL and commit of the newest whisper.cpp release that ships Windows binaries.
+
+    whisper.cpp publishes them in its build releases (b5454, …); its vX.Y.Z releases carry none."""
+
+    headers = {"User-Agent": "universal-content-intake-setup", "Accept": "application/vnd.github+json"}
+    if os.environ.get("GITHUB_TOKEN"):
+        headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+    request = urllib.request.Request(f"https://api.github.com/repos/{WHISPER_REPO}/releases?per_page=20", headers=headers)
+    with urllib.request.urlopen(request, timeout=60, context=_tls()) as response:
+        releases = json.load(response)
+    for release in releases:
+        if release.get("draft") or release.get("prerelease"):
+            continue
+        for asset in release.get("assets") or []:
+            if asset.get("name") == WINDOWS_WHISPER_ASSET:
+                return str(release["tag_name"]), str(asset["browser_download_url"]), str(release.get("target_commitish") or "master")
+    raise RuntimeError(f"GitHub 上最近的 whisper.cpp 发布里没有 {WINDOWS_WHISPER_ASSET}")
+
+
+def _install_windows_whisper(tag: str, url: str, commit: str, log: Callable[[str], None]) -> None:
+    """Download one build, run the self-test on it, and only then put it in place."""
+
+    with tempfile.TemporaryDirectory(prefix="uci-whisper-") as temporary:
+        root = Path(temporary)
+        log(f"下载 whisper.cpp {tag} 的 Windows 版…")
+        download(url, root / "whisper.zip", log=log)
+        with zipfile.ZipFile(root / "whisper.zip") as bundle:
+            bundle.extractall(root / "unpacked")
+        bin_dir = next((path.parent for path in (root / "unpacked").rglob("whisper-cli.exe")), None)
+        if bin_dir is None or not (bin_dir / "whisper-vad-speech-segments.exe").is_file():
+            raise RuntimeError("下载的压缩包里没有 whisper-cli.exe 和 whisper-vad-speech-segments.exe")
+        raw = f"https://raw.githubusercontent.com/{WHISPER_REPO}/{commit}"
+        download(f"{raw}/samples/jfk.wav", root / "jfk.wav", log=lambda _: None)
+        log("用 whisper.cpp 自带的测试录音自检…")
+        summary = whisper_self_test(bin_dir, root / "jfk.wav", root)
+        log(f"✓ 自检通过：{summary}")
+        target, staged, previous = WHISPER_ROOT / "bin", WHISPER_ROOT / "bin.new", WHISPER_ROOT / "bin.old"
+        for leftover in (staged, previous):
+            shutil.rmtree(leftover, ignore_errors=True)
+        shutil.copytree(bin_dir, staged)
+        if target.exists():
+            target.rename(previous)
+        staged.rename(target)
+        shutil.rmtree(previous, ignore_errors=True)
+        download(f"{raw}/LICENSE", WHISPER_ROOT / "LICENSE", log=lambda _: None)
+        WHISPER_VERSION_FILE.write_text(tag + "\n", encoding="utf-8")
+
+
+def _update_windows_whisper(current: str | None, log: Callable[[str], None]) -> None:
+    from src.queue.engine_check import is_newer
+
+    try:
+        tag, url, commit = latest_windows_build()
+    except (OSError, RuntimeError, ValueError) as error:
+        if current:
+            raise RuntimeError(f"没能查到 whisper.cpp 的最新 Windows 版（{error}），保留现有的 {current}") from None
+        tag, commit = WINDOWS_FALLBACK_BUILD
+        url = windows_build_url(tag)
+        log(f"没能查到最新版本（{error}），改用已验证的 {tag}")
+    if current and not is_newer(tag, current):
+        log(f"✓ whisper.cpp 已是最新（{current}）")
+        return
+    try:
+        _install_windows_whisper(tag, url, commit, log)
+    except (OSError, RuntimeError, zipfile.BadZipFile) as error:
+        raise RuntimeError(f"whisper.cpp {tag} 没有安装成功（{error}）" + (f"；已保留原来的 {current}" if current else "")) from None
+    log(f"✓ whisper.cpp {tag} 已安装" + (f"（原来是 {current}）" if current else ""))
+
+
 def build_swift_helpers(*, log: Callable[[str], None] = print) -> None:
     _check(["swift", "build", "-c", "release", "--package-path", str(TRANSLATION_DIR)], log=log)
     bin_path = subprocess.run(["swift", "build", "-c", "release", "--package-path", str(TRANSLATION_DIR), "--show-bin-path"],
@@ -370,5 +466,5 @@ def build_tools(*, models: bool = True, whisper: bool = True, swift: bool = True
         ensure_models(log=log)
     if whisper:
         build_whisper(update=update_whisper, log=log)
-    if swift:
+    if swift and compat.MAC:
         build_swift_helpers(log=log)

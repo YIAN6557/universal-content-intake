@@ -61,18 +61,23 @@ def cmd_settings(argv: Sequence[str], *, interactive: bool, read: Callable[[str]
 
 def _offer_subtitle_tools(prefs: preferences.Preferences, *, interactive: bool, read: Callable[[str], str],
                           out: Callable[[str], None]) -> None:
-    from src.get_cli import subtitle_tools_missing
+    from src.get_cli import subtitle_tools_missing, translation_missing
+    from src.setup import translation_setup
 
-    if not prefs.needs_subtitle_tools or not subtitle_tools_missing():
+    if not prefs.needs_subtitle_tools:
         return
-    out("翻译压制需要的语音识别模型和翻译工具还没装（约 490 MB）。")
-    if interactive and read("现在安装吗？[y] 安装  [n] 以后再说 > ").strip().lower() in {"y", "yes"}:
-        from src.setup import environment
+    if subtitle_tools_missing():
+        out("翻译压制需要的语音识别模型和工具还没装（约 490 MB）。")
+        if interactive and read("现在安装吗？[y] 安装  [n] 以后再说 > ").strip().lower() in {"y", "yes"}:
+            from src.setup import environment
 
-        environment.build_tools()
-        out("✓ 已安装。还需要 Apple 翻译语言包：运行 bin/uci setup 查看。")
-    else:
-        out("之后运行 bin/uci setup build-tools 安装，再运行 bin/uci setup 核对。")
+            environment.build_tools()
+            out("✓ 已安装。" + ("还需要 Apple 翻译语言包：运行 bin/uci setup 查看。" if translation_missing() is None else ""))
+        else:
+            out("之后运行 bin/uci setup build-tools 安装，再运行 bin/uci setup 核对。")
+    if translation_missing() is None or translation_missing():
+        out("")
+        translation_setup.offer(interactive=interactive, read=read, out=out)
 
 
 def _set_monitoring(enabled: bool, previously: bool | None, *, out: Callable[[str], None]) -> None:

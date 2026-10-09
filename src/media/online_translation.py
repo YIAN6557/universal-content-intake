@@ -8,7 +8,9 @@ pipeline does not care which engine translated.
 The user's choice lives in the ``translation`` section of the user config;
 the API key lives in the Keychain / Windows Credential Manager (service
 ``UCI Translation API``, account = provider key), or in the environment
-variable UCI_TRANSLATION_API_KEY.
+variable UCI_TRANSLATION_API_KEY. Two models are offered, DeepSeek (the
+default) and Qwen; ``base_url`` and ``model`` in the config override a
+preset when a provider renames a model or moves its endpoint.
 """
 
 from __future__ import annotations
@@ -67,38 +69,8 @@ PROVIDERS: dict[str, Provider] = {
         ),
         {"enable_thinking": False},
     ),
-    "doubao": Provider(
-        "doubao", "豆包（字节跳动·火山方舟）", "https://ark.cn-beijing.volces.com/api/v3", "doubao-seed-2-0-lite-260428",
-        "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
-        "每个模型开通时送 50 万 tokens 免费额度，之后按量付费；步骤比前两个多一步（要先开通模型）",
-        (
-            "打开 https://console.volcengine.com/ark ，注册火山引擎账号并完成实名认证。",
-            "左侧“开通管理”，找到 Doubao-Seed 的 lite 模型，点“开通服务”。",
-            "左侧“API Key 管理”→“创建 API Key”，复制。",
-            "在“模型广场”点开刚开通的模型，看它的“模型 ID”（形如 doubao-seed-2-0-lite-260428）。如果和这里的默认值不一样，告诉我，或配置时加 --model <模型 ID>。",
-        ),
-        {"thinking": {"type": "disabled"}},
-    ),
-    "glm": Provider(
-        "glm", "智谱 GLM", "https://open.bigmodel.cn/api/paas/v4", "glm-4.7-flash",
-        "https://bigmodel.cn/usercenter/proj-mgmt/apikeys",
-        "完全免费（GLM-4.7-Flash 是智谱的免费模型）；翻译质量够用，但不如前三个，高峰期可能变慢",
-        (
-            "打开 https://bigmodel.cn ，用手机号注册并登录（需要实名认证）。",
-            "右上角点“API Key”→“添加新的 API Key”，复制。",
-        ),
-        {"thinking": {"type": "disabled"}},
-    ),
-    "custom": Provider(
-        "custom", "其他：任何兼容 OpenAI 接口的服务（OpenAI、Gemini、OpenRouter、Kimi 等）", "", "",
-        "", "按那家服务的价格",
-        (
-            "按那家服务的文档拿到三样东西：API 地址（base URL，通常以 /v1 结尾）、模型名、API Key。",
-            "配置时加 --base-url <API 地址> --model <模型名>。",
-        ),
-    ),
 }
-RECOMMENDED = ("deepseek", "qwen", "doubao", "glm", "custom")
+RECOMMENDED = ("deepseek", "qwen")
 
 
 class TranslationError(RuntimeError):
