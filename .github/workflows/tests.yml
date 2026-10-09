@@ -142,9 +142,48 @@ jobs:
           ffprobe -hide_banner -loglevel error -show_entries stream=codec_type,width,height -of compact "%VIDEO%" || exit /b 1
           ffmpeg -hide_banner -loglevel error -ss 5 -i "%VIDEO%" -frames:v 1 "%RUNNER_TEMP%\uci-zh\frame.png" || exit /b 1
           type "%RUNNER_TEMP%\uci-zh\*.md"
+      - name: The monitoring Worker's Core runner, for real (full run, then a cancelled one)
+        run: |
+          start "" /b python tests\fixtures\fake_translation_server.py 8765
+          start "" /b python -m http.server 8766 --bind 127.0.0.1 --directory "%RUNNER_TEMP%\media"
+          powershell -NoProfile -Command "Start-Sleep -Seconds 3"
+          set "PYTHONUTF8=1"
+          python tests\fixtures\core_runner_check.py http://127.0.0.1:8766/jfk.mp4 "%RUNNER_TEMP%\worker-jobs"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: windows-subtitle-frame
           path: ${{ runner.temp }}/uci-zh/frame.png
           if-no-files-found: ignore
+
+  windows-monitoring:
+    name: Monitoring pieces on Windows (secret, Worker task)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install trafilatura certifi "yt-dlp[default]"
+      - name: Shared secret in Credential Manager and on the clipboard
+        run: |
+          call bin\uci settings --monitoring off --subtitles off || exit /b 1
+          call bin\uci setup secret create || exit /b 1
+          call bin\uci setup secret create && exit /b 1
+          call bin\uci setup secret copy || exit /b 1
+          powershell -NoProfile -Command "if ((Get-Clipboard).Length -lt 40) { exit 1 }" || exit /b 1
+          exit /b 0
+      - name: The Worker runs as a Task Scheduler task and stops with everything it started
+        run: |
+          call bin\uci settings --monitoring on
+          call bin\uci setup launchagent install || exit /b 1
+          powershell -NoProfile -Command "Start-Sleep -Seconds 20"
+          schtasks /Query /TN "\Universal Content Intake\worker" /FO LIST
+          powershell -NoProfile -Command "$n = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*src.queue.worker_cli*' }).Count; Write-Output \"worker processes: $n\"; if ($n -lt 1) { exit 1 }" || exit /b 1
+          type "%LOCALAPPDATA%\Universal Content Intake\Logs\worker.stderr.log"
+          call bin\uci setup launchagent uninstall || exit /b 1
+          powershell -NoProfile -Command "Start-Sleep -Seconds 5; $n = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*src.queue.worker_cli*' -or $_.CommandLine -like '*scheduled_run*' }).Count; Write-Output \"left after uninstall: $n\"; if ($n -gt 0) { exit 1 }" || exit /b 1
+          exit /b 0

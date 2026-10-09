@@ -8,7 +8,6 @@ import math
 import os
 import re
 import shutil
-import signal
 import subprocess
 import tempfile
 import threading
@@ -426,6 +425,10 @@ class SubprocessCoreRunner:
                 except BlockingIOError:
                     time.sleep(self.process_poll_seconds)
 
+            if compat.WINDOWS:
+                # Windows cannot hand the lock to the child, so a Core left running by a Worker that died
+                # does not hold it; stop that Core before starting another one for the same Job.
+                self._terminate_existing_core(state, job_file)
             job = existing
             network_retries = 0
             previous: tuple[str, str] | None = None
@@ -497,8 +500,10 @@ class SubprocessCoreRunner:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             close_fds=True,
-            pass_fds=(lock_fd,),
-            start_new_session=True,
+            # The child keeps the Job lock if the Worker dies (POSIX only; Windows locks belong to one process,
+            # so a restarted Worker there stops the recorded Core first, see run()).
+            **({} if compat.WINDOWS else {"pass_fds": (lock_fd,)}),
+            **compat.new_process_group(),
         )
         try:
             on_started(int(process.pid))
@@ -506,6 +511,7 @@ class SubprocessCoreRunner:
             self._terminate_process(process)
             raise
         power_process = self._start_caffeinate(int(process.pid))
+        compat.keep_awake(True)
         cancelled = False
         return_code: int | None = None
         try:
@@ -519,6 +525,7 @@ class SubprocessCoreRunner:
                     break
                 time.sleep(self.process_poll_seconds)
         finally:
+            compat.keep_awake(False)
             self._stop_caffeinate(power_process)
         return return_code, cancelled
 
@@ -696,7 +703,7 @@ class SubprocessCoreRunner:
         return job
 
     def _start_caffeinate(self, pid: int) -> subprocess.Popen[bytes] | None:
-        if not self.caffeinate_executable:
+        if not self.caffeinate_executable or compat.WINDOWS:
             return None
         try:
             return subprocess.Popen(
@@ -721,56 +728,25 @@ class SubprocessCoreRunner:
 
     @staticmethod
     def _terminate_process(process: subprocess.Popen[bytes]) -> None:
-        if process.poll() is not None:
-            return
         try:
-            os.killpg(int(process.pid), signal.SIGTERM)
-        except (OSError, ProcessLookupError):
-            process.terminate()
-        try:
-            process.wait(timeout=5)
+            compat.stop_process_group(process)
         except subprocess.TimeoutExpired:
-            try:
-                os.killpg(int(process.pid), signal.SIGKILL)
-            except (OSError, ProcessLookupError):
-                process.kill()
+            process.kill()
 
     @staticmethod
     def _terminate_existing_core(state: WorkerState, job_file: Path) -> None:
-        candidates: list[int] = []
+        needle = str(job_file)
         if state.core_pid is not None:
-            candidates.append(state.core_pid)
+            candidates = [state.core_pid]
         else:
-            try:
-                listing = subprocess.run(
-                    ["ps", "-axo", "pid=,command="],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    timeout=2,
-                ).stdout
-                needle = str(job_file)
-                for line in listing.splitlines():
-                    parts = line.strip().split(maxsplit=1)
-                    if len(parts) == 2 and needle in parts[1] and "src.cli" in parts[1]:
-                        candidates.append(int(parts[0]))
-            except (OSError, ValueError, subprocess.TimeoutExpired):
-                return
+            candidates = [pid for pid, command in compat.command_lines() if needle in command and "src.cli" in command]
         for pid in candidates:
+            # Only a Core started for this very Job: a recorded pid may since belong to another program.
+            if not any(needle in command and "src.cli" in command for _, command in compat.command_lines(pid)):
+                continue
             try:
-                command = subprocess.run(
-                    ["ps", "-p", str(pid), "-o", "command="],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    timeout=2,
-                ).stdout
-                if str(job_file) not in command or "src.cli" not in command:
-                    continue
-                if os.getpgid(pid) != pid:
-                    continue
-                os.killpg(pid, signal.SIGTERM)
-            except (OSError, ValueError, ProcessLookupError, subprocess.TimeoutExpired):
+                compat.stop_pid_group(pid)
+            except (OSError, ValueError, ProcessLookupError):
                 continue
 
 

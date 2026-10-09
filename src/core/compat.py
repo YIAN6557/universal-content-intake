@@ -153,6 +153,50 @@ def stop_process_group(process: subprocess.Popen, *, grace_seconds: float = 5) -
         process.wait(timeout=grace_seconds)
 
 
+def keep_awake(on: bool) -> None:
+    """Windows: keep the computer from sleeping while a job runs (call on and off from the same thread).
+
+    macOS uses ``caffeinate`` tied to the child process instead; see SubprocessCoreRunner."""
+
+    if not WINDOWS:
+        return
+    import ctypes
+
+    es_continuous, es_system_required = 0x80000000, 0x00000001
+    ctypes.windll.kernel32.SetThreadExecutionState(es_continuous | (es_system_required if on else 0))
+
+
+def command_lines(pid: int | None = None) -> list[tuple[int, str]]:
+    """(pid, command line) of running processes, or of one process. Empty when it cannot be read."""
+
+    try:
+        if WINDOWS:
+            where = f"-Filter 'ProcessId={int(pid)}'" if pid is not None else ""
+            script = f"Get-CimInstance Win32_Process {where} | ForEach-Object {{ [string]$_.ProcessId + [char]9 + [string]$_.CommandLine }}"
+            output = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True,
+                                    text=True, encoding="utf-8", errors="replace", timeout=30, check=False,
+                                    creationflags=subprocess.CREATE_NO_WINDOW).stdout
+            rows = [line.split("\t", 1) for line in output.splitlines() if "\t" in line]
+        else:
+            command = ["ps", "-p", str(pid), "-o", "pid=,command="] if pid is not None else ["ps", "-axo", "pid=,command="]
+            output = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False).stdout
+            rows = [line.strip().split(maxsplit=1) for line in output.splitlines()]
+        return [(int(row[0]), row[1]) for row in rows if len(row) == 2 and row[0].strip().isdigit()]
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return []
+
+
+def stop_pid_group(pid: int) -> None:
+    """Stop a process started with new_process_group() by an earlier run, given only its pid."""
+
+    if WINDOWS:
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, check=False,
+                       creationflags=subprocess.CREATE_NO_WINDOW)
+        return
+    if os.getpgid(pid) == pid:
+        os.killpg(pid, signal.SIGTERM)
+
+
 def chrome_path() -> Path:
     if WINDOWS:
         for root in (os.environ.get("PROGRAMFILES"), os.environ.get("PROGRAMFILES(X86)"), os.environ.get("LOCALAPPDATA")):

@@ -3,14 +3,15 @@
 ``publish_writer()`` picks the first writer that is set up:
 
 1. Claude: the ``anthropic`` package is installed and an API key is in the
-   login Keychain (service ``UCI Anthropic API``, account ``api-key``)::
+   Keychain / Windows Credential Manager (service ``UCI Anthropic API``,
+   account ``api-key``)::
 
-       security add-generic-password -s "UCI Anthropic API" -a api-key -w
+       bin/uci setup apikey anthropic
 
-2. Gemini: an API key is in the login Keychain (service ``UCI Gemini API``,
-   account ``api-key``); no extra package is needed::
+2. Gemini: an API key is stored the same way (service ``UCI Gemini API``);
+   no extra package is needed::
 
-       security add-generic-password -s "UCI Gemini API" -a api-key -w
+       bin/uci setup apikey gemini
 
    The model defaults to ``gemini-3.5-flash-lite`` (the one Cloud Stage 8
    verified live on 2026-10-02); ``UCI_GEMINI_MODEL`` overrides it.
@@ -25,7 +26,6 @@ from __future__ import annotations
 import json
 import os
 import ssl
-import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -66,15 +66,10 @@ OUTPUT_SCHEMA = {
 
 
 def _keychain_api_key(service: str = KEYCHAIN_SERVICE) -> str | None:
-    try:
-        result = subprocess.run(
-            ["/usr/bin/security", "find-generic-password", "-s", service, "-a", KEYCHAIN_ACCOUNT, "-w"],
-            check=False, capture_output=True, text=True, timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    key = result.stdout.strip()
-    return key if result.returncode == 0 and key else None
+    from src.queue.secrets import read_secret
+
+    key = (read_secret(service, KEYCHAIN_ACCOUNT) or "").strip()
+    return key or None
 
 
 def claude_publish_writer() -> PublishWriter | None:

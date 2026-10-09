@@ -100,6 +100,15 @@ def is_loaded(label: str) -> bool:
     return _launchctl("print", f"gui/{os.getuid()}/{label}").returncode == 0
 
 
+def is_running(label: str) -> bool:
+    """Windows: whether Task Scheduler reports the task as running right now."""
+
+    result = _schtasks("/Query", "/TN", task_name(label), "/FO", "CSV", "/NH")
+    # One CSV row: "TaskName","Next Run Time","Status"; the status is localised, so compare the English and Chinese words.
+    status = result.stdout.strip().rsplit(",", 1)[-1].strip('" ').lower() if result.returncode == 0 else ""
+    return status in {"running", "正在运行"}
+
+
 def owner(label: str = WORKER_LABEL) -> Path | None:
     """The project directory an installed agent runs from, or None when it is not installed."""
 
@@ -159,6 +168,7 @@ def uninstall(labels: tuple[str, ...] = ALL_LABELS) -> None:
             continue
         if compat.WINDOWS:
             if is_loaded(label):
+                _schtasks("/End", "/TN", task_name(label))  # a running Worker stops with everything it started
                 _schtasks("/Delete", "/TN", task_name(label), "/F")
         elif is_loaded(label):
             _launchctl("bootout", f"gui/{os.getuid()}/{label}")
@@ -229,6 +239,8 @@ def _install_tasks(python: str, labels: tuple[str, ...]) -> list[Path]:
         if label not in labels:
             continue
         path = plist_path(label)
+        if label == WORKER_LABEL and is_loaded(label):
+            _schtasks("/End", "/TN", task_name(label))  # restart with the new definition, like bootout + bootstrap
         path.write_text(task_xml(label, python), encoding="utf-16")
         result = _schtasks("/Create", "/TN", task_name(label), "/XML", str(path), "/F")
         if result.returncode != 0:

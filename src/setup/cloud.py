@@ -13,7 +13,8 @@ from typing import Any, Mapping
 
 from src.core.policies import PROJECT_DEFAULTS_PATH
 from src.queue.client import QueueClient
-from src.queue.secrets import KeychainSecretProvider, SecretProviderError
+from src.core import compat
+from src.queue.secrets import KeychainSecretProvider, SecretProviderError, write_secret
 from src.setup import store
 from src.setup.environment import PROJECT_ROOT, clasp_path
 
@@ -23,6 +24,7 @@ CLASPRC = Path.home() / ".clasprc.json"
 DEFAULT_TITLE = "Universal Content Intake"
 DEPLOYMENT_DESCRIPTION = "Universal Content Intake Queue API"
 HMAC_SERVICE = "UCI Queue API HMAC"
+SECRET_STORE = "Windows 凭据管理器" if compat.WINDOWS else "钥匙串"
 HMAC_ACCOUNT = "queue-api"
 APPS_SCRIPT_API_SETTINGS = "https://script.google.com/home/usersettings"
 DEPLOYMENT_ID = re.compile(r"\b(AKfyc[A-Za-z0-9_-]{20,})\b")
@@ -145,21 +147,22 @@ def secret_exists() -> bool:
 
 def create_secret(*, rotate: bool = False) -> None:
     if secret_exists() and not rotate:
-        raise SetupError("钥匙串里已有共享密钥。要换新的请加 --rotate（之后要把新值重新粘贴到云端）。")
-    value = secrets.token_urlsafe(48)
-    # `security -i` reads the command from stdin, so the value never appears in a process listing.
-    command = f'add-generic-password -U -s "{HMAC_SERVICE}" -a "{HMAC_ACCOUNT}" -w "{value}"\n'
-    result = subprocess.run(["/usr/bin/security", "-i"], input=command, capture_output=True, text=True, timeout=20, check=False)
-    if result.returncode != 0 or not secret_exists():
-        raise SetupError("无法写入 macOS 钥匙串。请确认钥匙串已解锁后重试。")
+        raise SetupError(f"{SECRET_STORE}里已有共享密钥。要换新的请加 --rotate（之后要把新值重新粘贴到云端）。")
+    try:
+        write_secret(HMAC_SERVICE, HMAC_ACCOUNT, secrets.token_urlsafe(48))
+    except SecretProviderError:
+        raise SetupError(f"无法写入{SECRET_STORE}。" + ("" if compat.WINDOWS else "请确认钥匙串已解锁后重试。")) from None
+    if not secret_exists():
+        raise SetupError(f"无法写入{SECRET_STORE}。")
 
 
 def copy_secret_to_clipboard() -> None:
     try:
         value = KeychainSecretProvider(service=HMAC_SERVICE, account=HMAC_ACCOUNT).get_secret()
     except SecretProviderError:
-        raise SetupError("钥匙串里没有共享密钥，先运行：bin/uci setup secret create") from None
-    subprocess.run(["/usr/bin/pbcopy"], input=value, text=True, check=True, timeout=10)
+        raise SetupError(f"{SECRET_STORE}里没有共享密钥，先运行：bin/uci setup secret create") from None
+    clipboard = ["clip"] if compat.WINDOWS else ["/usr/bin/pbcopy"]
+    subprocess.run(clipboard, input=value, text=True, check=True, timeout=10)
 
 
 # --- signed setup calls ------------------------------------------------------

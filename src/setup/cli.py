@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import plistlib
-import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -64,7 +63,7 @@ class Context:
 
 def _inspect_error(error: QueueApiError) -> str:
     if error.code == "AUTH_FAILED":
-        return "签名校验没通过：云端还没有粘贴共享密钥，或粘贴的值与本机钥匙串里的不一致。"
+        return f"签名校验没通过：云端还没有粘贴共享密钥，或粘贴的值与本机{cloud.SECRET_STORE}里的不一致。"
     if error.code == "API_RESPONSE_INVALID" and (error.detail or "").startswith("html"):
         return "云端返回了网页而不是数据：通常是还没在编辑器里运行 uciSetup 完成授权，或部署还没生效。"
     detail = f"（{error.detail}）" if error.detail else ""
@@ -157,7 +156,7 @@ def build_steps(ctx: Context) -> list[Step]:
     deployed = bool(ctx.config.get("queue_api_url")) and bool(state.get("deployment_id")) and state.get("deployed_digest") == state.get("pushed_digest")
     steps.append(Step("deploy", "部署 Queue API（Web App），写入本机配置", AGENT, deployed,
                       guide=["运行 bin/uci setup cloud deploy"]))
-    steps.append(Step("secret", "生成共享密钥，存进本机钥匙串", AGENT, ctx.secret,
+    steps.append(Step("secret", f"生成共享密钥，存进本机{cloud.SECRET_STORE}", AGENT, ctx.secret,
                       guide=["运行 bin/uci setup secret create（密钥不会显示在屏幕上）"]))
     sheets_ok = all((info.get("sheets") or {}).get(name) for name in SHEETS)
     authorized = ctx.inspect is not None and sheets_ok and info.get("scheduler_triggers") == 1
@@ -188,7 +187,7 @@ def build_steps(ctx: Context) -> list[Step]:
         "3.（本人）运行 bin/uci setup cloud open，在同一个“Universal Content Intake”项目的“项目设置 → 脚本属性”里"
         "添加 UCI_GEMINI_API_KEY，值粘贴这个 Key，保存。",
         f"4.（{AGENT}）运行 bin/uci setup config set semantic_judge_enabled=true semantic_gemini_model={GEMINI_MODEL}",
-        "5.（本人，可选）让本机也用它写发布文案：在终端运行 security add-generic-password -s \"UCI Gemini API\" -a api-key -w ，按提示粘贴 Key。",
+        "5.（本人，可选）让本机也用它写发布文案：在终端运行 bin/uci setup apikey gemini ，按提示粘贴 Key。",
         "不想用的话可以跳过：bin/uci setup skip gemini。但要知道跳过的代价：",
         "  · 选片只剩时长、标题规则和热度，你写的内容方向不起作用，选出来的视频会更杂；",
         "  · 发布标题只是原标题的直译，文案从字幕里摘句子，质量明显差一截。",
@@ -217,11 +216,12 @@ def build_steps(ctx: Context) -> list[Step]:
     worker_ok = launchagent.is_loaded(WORKER_LABEL) and launchagent.installed_here() and maintenance_installed()
     steps.append(Step("worker", "安装本机后台程序：处理任务、每周更新 yt-dlp、每两周检查下载引擎", AGENT, worker_ok,
                       guide=["运行 bin/uci setup launchagent install"]))
-    steps.append(Step("permissions", "macOS 权限：通知、下载文件夹和交付文件夹访问", HUMAN,
-                      store.is_confirmed(state, "macos-permissions"), guide=[
-        "后台程序第一次写入“下载”或“桌面/文稿”里的文件夹时，macOS 会弹窗询问是否允许 Python 访问，点“允许”。",
-        "系统设置 → 通知：允许“脚本编辑器”发送通知（完成和失败提醒用）。",
-        "确认后：bin/uci setup confirm macos-permissions"]))
+    if compat.MAC:  # Windows does not ask before a program writes to the user's folders
+        steps.append(Step("permissions", "macOS 权限：通知、下载文件夹和交付文件夹访问", HUMAN,
+                          store.is_confirmed(state, "macos-permissions"), guide=[
+            "后台程序第一次写入“下载”或“桌面/文稿”里的文件夹时，macOS 会弹窗询问是否允许 Python 访问，点“允许”。",
+            "系统设置 → 通知：允许“脚本编辑器”发送通知（完成和失败提醒用）。",
+            "确认后：bin/uci setup confirm macos-permissions"]))
     verified = bool(state.get("verified_at")) and settings.get("daily_selection_enabled") is True
     steps.append(Step("verify", "验收：连通性、配置自检、端到端试跑，然后开启每日选片", AGENT, verified,
                       guide=["运行 bin/uci setup verify（含一次约 1–3 分钟的本地试跑；跳过试跑加 --no-smoke）"]))
@@ -321,15 +321,33 @@ def cmd_cloud(args: argparse.Namespace) -> int:
         editor = cloud.editor_url(ids["script_id"])
         print(f"编辑器：{editor}\n表格：{cloud.spreadsheet_url(ids['spreadsheet_id'])}")
         if not args.no_browser:
-            subprocess.run(["/usr/bin/open", editor], check=False)
+            import webbrowser
+
+            webbrowser.open(editor)
             print("已在浏览器里打开编辑器。核对左上角项目名是“Universal Content Intake”再操作。")
+    return 0
+
+
+def cmd_apikey(args: argparse.Namespace) -> int:
+    import getpass
+
+    from src.media.publish_writer import GEMINI_KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, KEYCHAIN_SERVICE
+    from src.queue.secrets import write_secret
+
+    service = GEMINI_KEYCHAIN_SERVICE if args.service == "gemini" else KEYCHAIN_SERVICE
+    value = getpass.getpass("粘贴 API Key（不会显示），按回车 > ") if sys.stdin.isatty() else sys.stdin.readline()
+    if not value.strip():
+        print("没有收到 Key，什么都没改。")
+        return 1
+    write_secret(service, KEYCHAIN_ACCOUNT, value.strip())
+    print(f"✓ 已保存到这台电脑的{cloud.SECRET_STORE}（名称 “{service}”）。")
     return 0
 
 
 def cmd_secret(args: argparse.Namespace) -> int:
     if args.action == "create":
         cloud.create_secret(rotate=args.rotate)
-        print("✓ 共享密钥已生成并存进钥匙串（服务名 “UCI Queue API HMAC”）。")
+        print(f"✓ 共享密钥已生成并存进{cloud.SECRET_STORE}（名称 “UCI Queue API HMAC”）。")
         print("  下一步把它粘贴到云端：bin/uci setup secret copy，然后按 bin/uci setup 的提示操作。")
     else:
         cloud.copy_secret_to_clipboard()
@@ -623,6 +641,8 @@ def build_parser() -> argparse.ArgumentParser:
     cloud_parser.add_argument("action", choices=("create", "push", "deploy", "open"))
     cloud_parser.add_argument("--title", default=cloud.DEFAULT_TITLE)
     cloud_parser.add_argument("--no-browser", action="store_true", help="open：只显示链接，不打开浏览器")
+    apikey = sub.add_parser("apikey", help="保存写发布文案用的 API Key：gemini | anthropic")
+    apikey.add_argument("service", choices=("gemini", "anthropic"))
     secret = sub.add_parser("secret", help="共享密钥：create | copy")
     secret.add_argument("action", choices=("create", "copy"))
     secret.add_argument("--rotate", action="store_true")
@@ -653,7 +673,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 COMMANDS = {
     "status": cmd_status, "doctor": cmd_doctor, "build-tools": cmd_build_tools, "cloud": cmd_cloud,
-    "secret": cmd_secret, "creators": cmd_creators, "config": cmd_config, "confirm": cmd_confirm,
+    "secret": cmd_secret, "apikey": cmd_apikey, "creators": cmd_creators, "config": cmd_config, "confirm": cmd_confirm,
     "skip": cmd_skip, "launchagent": cmd_launchagent, "verify": cmd_verify,
     "translation": lambda args: translation_setup.main(args.rest),
 }

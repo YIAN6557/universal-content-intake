@@ -57,6 +57,9 @@ def run_smoke(
         if result.returncode == 3:
             stage3 = job.source_metadata.get("stage3") or {}
             language = (stage3.get("subtitle_discovery") or {}).get("primary_language_code") or "未知"
+            translation = stage3.get("translation") or {}
+            if translation.get("translation_engine") and translation.get("error_message"):  # online model
+                raise RuntimeError(f"试跑在字幕翻译时暂停：{translation['error_message']}")
             raise RuntimeError(f"试跑在字幕阶段暂停：{stage3.get('status') or '未知原因'}（字幕语言 {language}）。"
                                "缺翻译语言包时，到 系统设置 → 通用 → 语言与地区 → 翻译语言 下载对应语言。")
         if result.returncode != 0:

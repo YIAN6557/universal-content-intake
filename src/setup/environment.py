@@ -89,6 +89,8 @@ def clasp_path() -> Path:
 def _npm_global_fix(package: str) -> str:
     """npm -g needs a writable prefix; fall back to ~/.local when it is root-owned (no sudo needed)."""
 
+    if compat.WINDOWS:  # npm's global folder is under the user's AppData there, always writable
+        return f"npm install -g {package}"
     result = _run(["npm", "config", "get", "prefix"], timeout=20)
     prefix = Path(result.stdout.strip()) if result and result.returncode == 0 and result.stdout.strip() else None
     if prefix is not None and os.access(prefix / "lib" / "node_modules", os.W_OK):

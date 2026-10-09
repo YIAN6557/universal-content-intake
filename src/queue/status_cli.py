@@ -205,12 +205,17 @@ def analyze_cloud(status: Mapping[str, Any], now: datetime, report: Report) -> N
 def analyze_worker(log_path: Path, now: datetime, day: str, report: Report) -> None:
     report.add()
     report.add("【本机 Worker】")
-    try:
-        listing = subprocess.run(["launchctl", "list"], capture_output=True, text=True, timeout=10).stdout
-    except (OSError, subprocess.SubprocessError):
-        listing = ""
-    row = next((line.split("\t") for line in listing.splitlines() if line.endswith(WORKER_LABEL)), None)
-    running = bool(row and row[0].strip().isdigit())
+    if compat.WINDOWS:
+        from src.setup import launchagent
+
+        running = launchagent.is_running(WORKER_LABEL)
+    else:
+        try:
+            listing = subprocess.run(["launchctl", "list"], capture_output=True, text=True, timeout=10).stdout
+        except (OSError, subprocess.SubprocessError):
+            listing = ""
+        row = next((line.split("\t") for line in listing.splitlines() if line.endswith(WORKER_LABEL)), None)
+        running = bool(row and row[0].strip().isdigit())
     report.add(f"  进程：{'运行中' if running else '未运行'}")
     if not running:
         report.problems.append("Worker LaunchAgent 没有在运行")
