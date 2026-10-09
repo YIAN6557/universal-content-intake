@@ -410,7 +410,9 @@ class SubprocessCoreRunner:
         if existing.output_result is not None:
             return self._formal_result(existing, state)
 
-        lock_path = job_file.parent / "temp" / ".core-process.lock"
+        # Next to job.json, not in temp/: finalize-job empties temp/ while this lock is held, and Windows cannot
+        # delete a file that is open.
+        lock_path = job_file.parent / ".core-process.lock"
         fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
         compat.make_private(fd)
         locked = False
