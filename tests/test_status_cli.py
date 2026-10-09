@@ -48,6 +48,10 @@ class StatusReportTests(unittest.TestCase):
         self.run = patcher.start()
         self.addCleanup(patcher.stop)
         self.run.return_value.stdout = LAUNCHCTL_RUNNING
+        # The report reads launchctl's listing; on Windows it asks Task Scheduler instead (covered in test_compat).
+        platform = patch("src.queue.status_cli.compat.WINDOWS", False)
+        platform.start()
+        self.addCleanup(platform.stop)
 
     def write_log(self, *lines: str) -> None:
         self.log.write_text("\n".join(lines) + "\n", encoding="utf-8")
