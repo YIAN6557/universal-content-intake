@@ -104,6 +104,8 @@ class Settings:
     def label(self) -> str:
         if self.engine != "online":
             return "Apple Translation"
+        if not self.provider:
+            return "在线翻译（还没选模型）"
         name = PROVIDERS[self.provider].name if self.provider in PROVIDERS else self.provider
         return f"{name} / {self.model}"
 

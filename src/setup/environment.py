@@ -390,13 +390,20 @@ def latest_windows_build() -> tuple[str, str, str]:
     request = urllib.request.Request(f"https://api.github.com/repos/{WHISPER_REPO}/releases?per_page=20", headers=headers)
     with urllib.request.urlopen(request, timeout=60, context=_tls()) as response:
         releases = json.load(response)
+    from src.queue.engine_check import parse_version
+
+    builds = []
     for release in releases:
         if release.get("draft") or release.get("prerelease"):
             continue
         for asset in release.get("assets") or []:
-            if asset.get("name") == WINDOWS_WHISPER_ASSET:
-                return str(release["tag_name"]), str(asset["browser_download_url"]), str(release.get("target_commitish") or "master")
-    raise RuntimeError(f"GitHub 上最近的 whisper.cpp 发布里没有 {WINDOWS_WHISPER_ASSET}")
+            if asset.get("name") == WINDOWS_WHISPER_ASSET and parse_version(str(release.get("tag_name"))):
+                builds.append((str(release["tag_name"]), str(asset["browser_download_url"]),
+                               str(release.get("target_commitish") or "master")))
+    if not builds:
+        raise RuntimeError(f"GitHub 上最近的 whisper.cpp 发布里没有 {WINDOWS_WHISPER_ASSET}")
+    # The API lists by creation date, which is not always build order.
+    return max(builds, key=lambda build: parse_version(build[0]) or ())
 
 
 def _install_windows_whisper(tag: str, url: str, commit: str, log: Callable[[str], None]) -> None:

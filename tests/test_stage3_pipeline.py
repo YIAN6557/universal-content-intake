@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 from unittest.mock import patch
 
+from src.media import online_translation
 from src.core.job import ContentType, Job, JobState
 from src.core.video_stage3_pipeline import run_video_stage3_pipeline
 from src.media.asr import ASRRuntimeError
@@ -22,6 +24,19 @@ VIDEO_FACTS = {
     ],
 }
 
+
+
+# These tests cover the Apple Translation path, which is the default only on macOS.
+_APPLE_ENGINE = mock.patch.object(online_translation, "load_settings",
+                                  return_value=online_translation.Settings("apple", "", "", ""))
+
+
+def setUpModule() -> None:
+    _APPLE_ENGINE.start()
+
+
+def tearDownModule() -> None:
+    _APPLE_ENGINE.stop()
 
 class FakeVideoProvider:
     def __init__(self) -> None:

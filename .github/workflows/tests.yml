@@ -130,10 +130,12 @@ jobs:
           mkdir "%RUNNER_TEMP%\media"
           curl -sSfL -o "%RUNNER_TEMP%\media\jfk.wav" https://raw.githubusercontent.com/ggml-org/whisper.cpp/master/samples/jfk.wav || exit /b 1
           ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=navy:s=640x360:r=25 -i "%RUNNER_TEMP%\media\jfk.wav" -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac "%RUNNER_TEMP%\media\jfk.mp4" || exit /b 1
-          start "" /b python -m http.server 8766 --bind 127.0.0.1 --directory "%RUNNER_TEMP%\media"
-          powershell -NoProfile -Command "Start-Sleep -Seconds 3"
       - name: Download, recognise, translate and burn in
         run: |
+          rem Background servers do not outlive their step, so both are started here.
+          start "" /b python tests\fixtures\fake_translation_server.py 8765
+          start "" /b python -m http.server 8766 --bind 127.0.0.1 --directory "%RUNNER_TEMP%\media"
+          powershell -NoProfile -Command "Start-Sleep -Seconds 3"
           call bin\uci http://127.0.0.1:8766/jfk.mp4 --zh --to "%RUNNER_TEMP%\uci-zh" || exit /b 1
           dir /s /b "%RUNNER_TEMP%\uci-zh"
           for %%f in ("%RUNNER_TEMP%\uci-zh\*.mp4") do set "VIDEO=%%f"

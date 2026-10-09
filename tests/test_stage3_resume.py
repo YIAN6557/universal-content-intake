@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 from unittest.mock import patch
 
+from src.media import online_translation
 from src.core.job import ContentType, Job
 from src.core.video_stage3_pipeline import _cached_or_transcribe, _translate
 from src.media.stage3_workspace import Stage3Workspace
@@ -26,6 +28,19 @@ def workspace(root: Path) -> tuple[Job, Stage3Workspace]:
     )
     return job, Stage3Workspace(job)
 
+
+
+# These tests cover the Apple Translation path, which is the default only on macOS.
+_APPLE_ENGINE = mock.patch.object(online_translation, "load_settings",
+                                  return_value=online_translation.Settings("apple", "", "", ""))
+
+
+def setUpModule() -> None:
+    _APPLE_ENGINE.start()
+
+
+def tearDownModule() -> None:
+    _APPLE_ENGINE.stop()
 
 class Stage3ResumeTests(unittest.TestCase):
     def test_completed_asr_artifact_is_reused_without_second_whisper_invocation(self) -> None:

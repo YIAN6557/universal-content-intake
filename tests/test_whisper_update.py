@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +8,7 @@ from src.queue import engine_check
 from src.setup import environment
 
 
+@unittest.skipIf(os.name == "nt", "Windows downloads prebuilt binaries; tests/test_online_translation.py covers that")
 class WhisperUpdateTests(unittest.TestCase):
     """whisper.cpp follows its newest release, but a build only replaces the old one after the self-test passes."""
 
