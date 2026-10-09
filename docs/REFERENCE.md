@@ -1,18 +1,19 @@
 # Developer reference
 
-Two layers: the one-link downloader (`bin/uci <link>`) is the product; automatic monitoring (cloud + LaunchAgent worker) is optional and switched by `features.monitoring` in the user config. `features.video_subtitles` (`on`/`off`/`ask`) decides whether user downloads of videos get Chinese subtitles; monitored videos always do.
+Two layers: the one-link downloader (`bin/uci <link>`) is the product; automatic monitoring (cloud + local worker) is optional and switched by `features.monitoring` in the user config. `features.video_subtitles` (`on`/`off`/`ask`) decides whether user downloads of videos get Chinese subtitles; monitored videos always do.
 
 ## Layout and ownership
 
 | Path | Owns |
 |---|---|
+| `src/core/compat.py` | Everything that differs between macOS and Windows: file locks, process groups, data and log folders, tool lookup, notifications, sleep prevention, Chrome |
 | `src/core/` | Job contracts, policy, type resolution, state transitions, error mapping, persisted Provider checkpoints, formal output promotion and cleanup |
 | `src/providers/` | Acquisition adapters (video, image, article, webpage, document). They return structured metadata, artifacts, resume tokens or failures and never change Job state |
-| `src/media/` | Subtitle discovery/selection, VAD + Whisper ASR, Apple Translation bridge, subtitle layout, burn-in, publish assist |
+| `src/media/` | Subtitle discovery/selection, VAD + Whisper ASR, Apple Translation bridge, online translation (`online_translation.py`: DeepSeek / Qwen), subtitle layout, burn-in, publish assist |
 | `src/output/` | Workspace containment, output paths, `info.md`, delivery to the delivery folder and the Chinese publish sheet |
 | `src/uci_cli.py` | `bin/uci`: the single entry point (download, `settings`, `setup`, `status`) and the first-run questions |
-| `src/queue/` | Signed Queue API client, Keychain secret, LaunchAgent Worker, `bin/uci status` report, weekly yt-dlp updater, two-weekly engine check (`engine_check.py`: GitHub `releases/latest` redirect, notify only) |
-| `src/setup/` | `bin/uci setup` wizard and `preferences.py` (the two first-run choices) |
+| `src/queue/` | Signed Queue API client, secrets (Keychain / Windows Credential Manager), Worker, `bin/uci status` report, weekly yt-dlp updater, two-weekly engine check (`engine_check.py`: GitHub `releases/latest` redirect, notify only) |
+| `src/setup/` | `bin/uci setup` wizard, `preferences.py` (the two first-run choices), `translation_setup.py` (choosing a model and saving its key), `launchagent.py` + `scheduled_run.py` (LaunchAgents / Task Scheduler) |
 | `src/get_cli.py` | the one-link downloader behind `bin/uci <link>` (stated type, or detection by platform → extension → server response; subtitles per the saved choice or `--zh`/`--no-zh`) |
 | `cloud/apps-script/` | Creator discovery, snapshots, baselines, HOT scoring, content filter, optional Gemini judge, daily selection, Queue sheet and the HMAC-authenticated Web App |
 | `apple-helper/` | Swift sources for the Apple Translation and PDFKit helpers (built by `bin/uci setup build-tools`) |
@@ -50,18 +51,24 @@ read-only `status`, and the setup actions (`setup_inspect`, `setup_config_set`,
 
 ## Worker
 
-The LaunchAgent Worker claims one task at a time and drives the VIDEO Job by
+The Worker (a LaunchAgent on macOS, a Task Scheduler task on Windows) claims one task at a time and drives the VIDEO Job by
 its persisted progress: `video-run` → `stage3-run` → `finalize-job`. After a
 restart it continues at the unfinished step.
 
 - **Transient network failures.** `NETWORK_PAUSED` is retried inside the claim
   (60/180/600 s) before the task is paused.
-- **Stage 3 pauses.** A missing translation language pack or an undetermined
+- **Stage 3 pauses.** A missing translation language pack, a missing or
+  rejected online-model key (or an empty balance), or an undetermined
   ASR language pauses the task, and the pause can be recovered.
 - **Delivery.** When idle, the Worker moves finished videos and their publish
   sheets into `output.delivery_root`.
-- **Notifications.** It posts macOS notifications for completed, paused,
-  failed and cutoff-eliminated tasks.
+- **Notifications.** It posts desktop notifications (Notification Center on
+  macOS, a toast on Windows) for completed, paused, failed and
+  cutoff-eliminated tasks.
+- **Windows.** Task Scheduler runs it through `src/setup/scheduled_run.py`,
+  which writes the logs, restarts it after an error exit and ends everything
+  it started when the task ends. Platform differences live in
+  `src/core/compat.py`.
 
 ## Command-line tools
 

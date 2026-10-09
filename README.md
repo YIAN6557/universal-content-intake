@@ -2,7 +2,7 @@
 
 [中文说明](README.zh-CN.md)
 
-Universal Content Intake is a download tool for the Mac. **Give it one link
+Universal Content Intake is a download tool for macOS and Windows. **Give it one link
 and it downloads what is behind it**: a video, a document, images, an article
 or a whole web page. The result is filed in your Downloads folder.
 
@@ -14,11 +14,25 @@ decide whether to use it the first time you run the tool.
 
 ## Quick start
 
+macOS (Terminal):
+
 ```bash
 git clone https://github.com/YIAN6557/universal-content-intake.git
 cd universal-content-intake
 bin/uci https://example.com/report.pdf
 ```
+
+Windows (Command Prompt or PowerShell; install Python 3.11+ and Git first,
+for example with `winget install Python.Python.3.13 Git.Git`):
+
+```bat
+git clone https://github.com/YIAN6557/universal-content-intake.git
+cd universal-content-intake
+bin\uci https://example.com/report.pdf
+```
+
+Everything below works the same on both systems. The examples write
+`bin/uci`; on Windows type `bin\uci` (in PowerShell `bin/uci` works too).
 
 The first run asks two questions:
 
@@ -78,9 +92,33 @@ scheduled background jobs, whether or not monitoring is on:
 - **The other engines are checked every two weeks:** gallery-dl, gdown,
   trafilatura, SingleFile, rclone, aria2, deno, and whisper.cpp for
   subtitles. Each is compared with its latest GitHub release. When one is
-  newer you get a macOS notification. **Nothing is installed automatically.**
-  Each update is one command; a whisper.cpp upgrade is built and checked on
-  a test recording first, and the old build stays if the check fails.
+  newer you get a desktop notification. **Nothing is installed automatically.**
+  Each update is one command; a whisper.cpp upgrade is checked on a test
+  recording first, and the old version stays if the check fails.
+
+On macOS these are LaunchAgents; on Windows they are tasks in the "Universal
+Content Intake" folder of Task Scheduler.
+
+### Chinese subtitles: who translates
+
+Speech recognition (whisper.cpp) always runs on your computer. Translation:
+
+- **macOS:** Apple Translation, on the device and free, by default. You can
+  switch to an online model instead.
+- **Windows:** an online model, since Windows has no built-in translation.
+  Two are offered: **DeepSeek** (the default, very cheap) and **Qwen**
+  (Alibaba Cloud Bailian, with a free quota for new users).
+
+When you turn subtitles on, the tool asks whether to connect a model, explains
+step by step how to get an API key, tries the key on one sentence and keeps it
+in the Keychain or Windows Credential Manager. Any time later:
+
+```bash
+bin/uci setup translation use deepseek   # or qwen; shows how to get a key
+bin/uci setup translation key            # paste the key (not shown on screen); it is tested before it is saved
+bin/uci setup translation test           # translate one sentence with the saved key
+bin/uci setup translation apple          # macOS: back to Apple Translation
+```
 
 ```bash
 bin/uci engines    # check now: each engine's version and how to update it
@@ -92,7 +130,7 @@ bin/uci status     # the result of the last check
 ```
  Creators ─► periodic discovery ─► early view tracking ─► rules + optional AI editorial check ─► daily pick
                                                                                                    │
- Delivery folder ◄─ burn-in ◄─ on-device translation ◄─ subtitles / on-device speech recognition ◄─ Mac worker
+ Delivery folder ◄─ burn-in ◄─ translation ◄─ subtitles / on-device speech recognition ◄─ local worker
 ```
 
 - **In the cloud (Google Apps Script + one Google Sheet).**
@@ -102,8 +140,8 @@ bin/uci status     # the result of the last check
     taking off.
   - It applies your length and title rules. With Gemini connected, it also
     checks each video against your editorial direction.
-  - Once a day it picks one or two videos for the Mac.
-- **On your Mac (a background worker).** It downloads the picked videos,
+  - Once a day it picks one or two videos for your computer.
+- **On your computer (a background worker).** It downloads the picked videos,
   translates them, burns in Chinese subtitles and delivers each one with a
   publish sheet: title, copy, hashtags and source.
 
@@ -126,11 +164,13 @@ direction and writes the publish copy.
 
 | Feature | Needs |
 |---|---|
-| Downloading (everyone) | macOS 15 or newer (Apple silicon recommended), Python 3.11+, ffmpeg, yt-dlp, deno; gallery-dl for images, SingleFile and Chrome for whole pages, rclone for cloud drives |
-| Subtitles (when set to on or ask) | Xcode Command Line Tools; the wizard downloads the ~490 MB Whisper speech model and builds the translation helper; Apple Translation language pack (English → Simplified Chinese) |
+| Downloading (everyone) | macOS 15 or newer (Apple silicon recommended) or Windows 10 (1809+) / 11; Python 3.11+, ffmpeg, yt-dlp, deno; gallery-dl for images, SingleFile and Chrome for whole pages, rclone for cloud drives |
+| Subtitles on macOS (when set to on or ask) | Xcode Command Line Tools; the wizard downloads the ~490 MB Whisper speech model and builds whisper.cpp and the translation helper; Apple Translation language pack (English → Simplified Chinese), or a DeepSeek / Qwen API key |
+| Subtitles on Windows (when set to on or ask) | the wizard downloads the ~490 MB Whisper speech model and whisper.cpp's ready-made Windows build; a DeepSeek or Qwen API key |
 | Automatic monitoring (when on) | All of the above, plus a Google account and Node.js (for `clasp`); a free Gemini API key is recommended |
 
-`bin/uci setup doctor` lists anything missing with the command to install it.
+`bin/uci setup doctor` lists anything missing with the command to install it
+(Homebrew on macOS, winget on Windows).
 Tools for features you have switched off are marked as not needed.
 
 ## Settings and setup
@@ -157,7 +197,7 @@ aliases of `bin/uci get`, `bin/uci setup` and `bin/uci status`.
 | `~/.config/universal-content-intake/config.yaml` | the two choices (`features.monitoring`, `features.video_subtitles`); downloads, delivery and work folders; video quality (1080p by default); Chrome sign-in fallback (off by default); cloud endpoint |
 | Google Sheet → `Config` (monitoring; edit with `bin/uci setup config set key=value`) | timezone, discovery window, final sweep, selection time, daily count, latest start time for the second pick, view thresholds, maximum length, title rules, Gemini check and your editorial direction |
 | Google Sheet → `Creators` (monitoring; edit with `bin/uci setup creators …`) | the creator whitelist |
-| macOS Keychain | the shared secret between Mac and cloud; optional Gemini / Anthropic keys for publish copy |
+| macOS Keychain / Windows Credential Manager | the shared secret between your computer and the cloud; the DeepSeek / Qwen key for subtitles; optional Gemini / Anthropic keys for publish copy (`bin/uci setup apikey gemini`) |
 | Apps Script → Script Properties | the same shared secret; optional `UCI_GEMINI_API_KEY` |
 
 Your creator list and editorial direction stay in your own Google Sheet and
@@ -167,12 +207,14 @@ local config; none of it is stored in this repository.
 
 - Downloads are anonymous. Chrome's sign-in state is used for sign-in-gated
   videos only when you enable `video.allow_browser_cookies`.
-- Speech recognition and translation run on your Mac. The optional Gemini
-  check sends video titles, descriptions and statistics to Google. The
-  optional publish writer also sends translated subtitle excerpts.
-- With automatic monitoring, every request between the Mac and the cloud is
-  signed with HMAC-SHA256. The secret lives only in your Keychain and Script
-  Properties, and the wizard never displays it.
+- Speech recognition runs on your computer, and so does Apple Translation on
+  macOS. With an online model (always on Windows) the subtitle text is sent to
+  DeepSeek or Qwen for translation. The optional Gemini check sends video
+  titles, descriptions and statistics to Google. The optional publish writer
+  also sends translated subtitle excerpts.
+- With automatic monitoring, every request between your computer and the cloud
+  is signed with HMAC-SHA256. The secret lives only in your Keychain or
+  Credential Manager and in Script Properties, and the wizard never displays it.
 
 ## Responsible use
 
@@ -187,6 +229,11 @@ liability for how it is used.
 python3 -m unittest discover -s tests   # Python
 node --test tests/*.js                  # Apps Script (run in a Node VM)
 ```
+
+GitHub Actions runs the Python tests on macOS and Windows, plus real downloads,
+a full subtitle run and the background tasks on Windows
+(`.github/workflows/tests.yml`). What differs between the two systems lives in
+`src/core/compat.py`.
 
 The per-stage command-line tools and module ownership are described in
 [docs/REFERENCE.md](docs/REFERENCE.md).

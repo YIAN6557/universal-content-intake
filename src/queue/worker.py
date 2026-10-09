@@ -425,7 +425,7 @@ class SubprocessCoreRunner:
                 except BlockingIOError:
                     time.sleep(self.process_poll_seconds)
 
-            if compat.WINDOWS:
+            if compat.WINDOWS and state.core_pid is not None:
                 # Windows cannot hand the lock to the child, so a Core left running by a Worker that died
                 # does not hold it; stop that Core before starting another one for the same Job.
                 self._terminate_existing_core(state, job_file)

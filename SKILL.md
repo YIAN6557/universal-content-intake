@@ -78,16 +78,23 @@ user's two choices need.
 
 - **Never decide the two first-run choices yourself.** Ask the user.
 - **Never type, paste or print secrets.** This covers the Queue API secret, the
-  Gemini key and the Anthropic key. The wizard stores the Queue secret in the
-  Keychain and copies it to the clipboard (`bin/uci setup secret copy`). The
-  user pastes it into Script Properties. API keys are created and pasted by the
-  user.
+  Gemini key, the Anthropic key and the DeepSeek / Qwen translation key. The
+  wizard stores the Queue secret in the Keychain (Windows: Credential Manager)
+  and copies it to the clipboard (`bin/uci setup secret copy`). The user pastes
+  it into Script Properties. API keys are created by the user and pasted by
+  the user into `bin/uci setup translation key` or `bin/uci setup apikey …`.
+- **Let the user choose the translation model.** When subtitles are on, Windows
+  needs an online model and macOS may use one instead of Apple Translation.
+  Offer DeepSeek (default) or Qwen, run `bin/uci setup translation use <name>`
+  and walk the user through the key steps it prints.
 - **Leave Google sign-in and consent to the user.** That includes
   `clasp login`, the Apps Script authorization dialog, the "unverified app"
   screen, and enabling the Apps Script API at
   https://script.google.com/home/usersettings.
-- **Leave macOS prompts to the user.** That includes installing the Xcode
-  tools, translation language packs, folder access and notifications.
+- **Leave system prompts to the user.** On macOS that includes installing the
+  Xcode tools, translation language packs, folder access and notifications; on
+  Windows, winget installs that ask for confirmation.
+- **On Windows the command is `bin\uci`.** Everything else is the same.
 - **Steer the user to the right editor.** Open it with
   `bin/uci setup cloud open` and have the user check that the project name at
   the top left is "Universal Content Intake". Tell them never to click into or

@@ -182,8 +182,8 @@ jobs:
           call bin\uci setup launchagent install || exit /b 1
           powershell -NoProfile -Command "Start-Sleep -Seconds 20"
           schtasks /Query /TN "\Universal Content Intake\worker" /FO LIST
-          powershell -NoProfile -Command "$n = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*src.queue.worker_cli*' }).Count; Write-Output \"worker processes: $n\"; if ($n -lt 1) { exit 1 }" || exit /b 1
+          powershell -NoProfile -Command "$n = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'python*' -and $_.CommandLine -like '*src.queue.worker_cli*' }).Count; Write-Output \"worker processes: $n\"; if ($n -lt 1) { exit 1 }" || exit /b 1
           type "%LOCALAPPDATA%\Universal Content Intake\Logs\worker.stderr.log"
           call bin\uci setup launchagent uninstall || exit /b 1
-          powershell -NoProfile -Command "Start-Sleep -Seconds 5; $n = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*src.queue.worker_cli*' -or $_.CommandLine -like '*scheduled_run*' }).Count; Write-Output \"left after uninstall: $n\"; if ($n -gt 0) { exit 1 }" || exit /b 1
+          powershell -NoProfile -Command "Start-Sleep -Seconds 5; $n = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'python*' -and ($_.CommandLine -like '*src.queue.worker_cli*' -or $_.CommandLine -like '*scheduled_run*') }).Count; Write-Output \"left after uninstall: $n\"; if ($n -gt 0) { exit 1 }" || exit /b 1
           exit /b 0

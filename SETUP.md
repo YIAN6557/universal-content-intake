@@ -52,7 +52,9 @@ bin/uci setup
 bin/uci setup doctor
 ```
 
-逐项检查 macOS 15+、Python 3.11+、certifi、ffmpeg/ffprobe、yt-dlp、deno；启用翻译压制时还检查 Xcode 命令行工具，启用自动监控时还检查 Node.js 和 clasp。用不到的项目会标注"开启某功能时才需要"。下载图片、整页保存网页、云盘链接还分别用到 gallery-dl、SingleFile 加 Chrome、rclone，缺什么都会给出安装命令。常用的安装命令：
+逐项检查 macOS 15+（或 Windows 10/11）、Python 3.11+、certifi、ffmpeg/ffprobe、yt-dlp、deno；在 Mac 上启用翻译压制时还检查 Xcode 命令行工具，启用自动监控时还检查 Node.js 和 clasp。用不到的项目会标注"开启某功能时才需要"。下载图片、整页保存网页、云盘链接还分别用到 gallery-dl、SingleFile 加 Chrome、rclone，缺什么都会给出安装命令。常用的安装命令：
+
+Mac：
 
 ```bash
 xcode-select --install                                  # 翻译压制需要；本人在弹窗里点"安装"
@@ -61,7 +63,18 @@ python3 -m pip install --user -U certifi "yt-dlp[default]"
 npm install -g @google/clasp                            # 自动监控需要；提示权限不足时改用：npm install -g --prefix ~/.local @google/clasp
 ```
 
-后台程序的 PATH 很短，所以系统会主动去这些位置找工具：Homebrew、`pip --user`、`~/bin`、`~/.deno/bin`。工具装在别处时，可以用环境变量 `UCI_YTDLP_PATH`、`UCI_FFMPEG_PATH`、`UCI_FFPROBE_PATH`、`UCI_DENO_PATH`、`UCI_CLASP_PATH` 指定路径。
+Windows（`winget` 是 Windows 10/11 自带的安装工具；装完后关掉终端重新打开，新装的命令才能用）：
+
+```bat
+winget install --id Gyan.FFmpeg -e
+winget install --id DenoLand.Deno -e
+winget install --id Google.Chrome -e                    :: 整页保存网页用
+winget install --id OpenJS.NodeJS.LTS -e                :: 整页保存网页和自动监控用
+py -m pip install --user -U certifi trafilatura "yt-dlp[default]" gallery-dl
+npm install -g @google/clasp                            :: 自动监控需要
+```
+
+后台程序的 PATH 很短，所以系统会主动去这些位置找工具：Homebrew、winget、Scoop、`pip --user`、npm 全局目录、`~/bin`、`~/.deno/bin`。工具装在别处时，可以用环境变量 `UCI_YTDLP_PATH`、`UCI_FFMPEG_PATH`、`UCI_FFPROBE_PATH`、`UCI_DENO_PATH`、`UCI_CLASP_PATH` 指定路径。
 
 ## 下载引擎的定期维护（不启用自动监控时）【Agent】
 
@@ -69,7 +82,7 @@ npm install -g @google/clasp                            # 自动监控需要；�
 bin/uci setup launchagent install
 ```
 
-装两个后台定时任务（不装自动监控的处理程序）：
+装两个后台定时任务（不装自动监控的处理程序）。Mac 上是 LaunchAgent，Windows 上是“任务计划程序”里“Universal Content Intake”文件夹下的 `ytdlp-update` 和 `engine-check`：
 
 - `local.universal-content-intake.ytdlp-update`：每周自动更新 yt-dlp，更新后真实试一次，失败就退回旧版本。
 - `local.universal-content-intake.engine-check`：每两周检查 gallery-dl、gdown、trafilatura、SingleFile、rclone、aria2、deno 和 whisper.cpp 在 GitHub 上有没有新版本。有的话发系统通知，**只提醒，不自动安装**；`bin/uci engines` 会给出每个引擎的一条更新命令。
@@ -102,15 +115,28 @@ bin/uci setup build-tools
 ```
 
 - 下载 Whisper small 多语言模型（约 490 MB）和 Silero VAD 模型，并逐个校验 SHA-256。
-- 从 GitHub 上最新的正式版本编译 whisper.cpp（需要 cmake，没有的话：`brew install cmake` 或 `python3 -m pip install --user cmake`）。编译完先用 whisper.cpp 自带的测试录音自检，通过才安装；连不上 GitHub 或最新版本自检失败时，改用已验证过的版本。
+- Mac：从 GitHub 上最新的正式版本编译 whisper.cpp（需要 cmake，没有的话：`brew install cmake` 或 `python3 -m pip install --user cmake`）。编译完先用 whisper.cpp 自带的测试录音自检，通过才安装；连不上 GitHub 或最新版本自检失败时，改用已验证过的版本。
+- Windows：不用编译，直接下载 whisper.cpp 官方发布的 Windows 版（`whisper-bin-x64.zip`），同样先用测试录音自检，通过才安装。
 - 以后 whisper.cpp 出了新版本（每两周的检查会提醒），升级只要一条命令：`bin/uci setup build-tools --skip-models --skip-swift --update-whisper`。新版本自检不通过就保留旧版本。
-- 编译 Apple 翻译小工具和 PDF 信息小工具（需要 Xcode 命令行工具）。
+- Mac：编译 Apple 翻译小工具和 PDF 信息小工具（需要 Xcode 命令行工具）。
 
 可以用 `--skip-models`、`--skip-whisper`、`--skip-swift` 跳过其中某项。
 
-## Apple 翻译语言包【本人】
+## 翻译：Apple 翻译语言包（Mac 默认）或在线模型（Windows 必需）【本人】
 
-打开"系统设置 → 通用 → 语言与地区 → 翻译语言"，下载**英语**和**中文（简体）**。向导会调用翻译小工具核对是否就绪。
+**Mac 用 Apple 翻译时**：打开"系统设置 → 通用 → 语言与地区 → 翻译语言"，下载**英语**和**中文（简体）**。向导会调用翻译小工具核对是否就绪。
+
+**Windows，或 Mac 想用在线模型时**：选一个模型，按提示申请 API Key，再粘贴进来。
+
+```bash
+bin/uci setup translation use deepseek   # 默认推荐；想用通义千问就写 qwen
+bin/uci setup translation key            # 本人粘贴 Key（屏幕上不显示）；先试翻一句，成功才保存
+```
+
+- **DeepSeek**：在 https://platform.deepseek.com 注册、充值（10 元能用很久），在"API keys"里创建 Key。翻一条 10 分钟的视频不到 1 毛钱。
+- **通义千问（阿里云百炼）**：在 https://bailian.console.aliyun.com 登录（需要实名认证），开通"模型服务"，创建 API Key。新用户有免费额度。
+- Key 存在钥匙串或 Windows 凭据管理器里，不写进任何文件。字幕文字会发送给所选的服务做翻译。
+- 余额不足、Key 失效或模型改名时，视频会在翻译这一步停下并说明原因；处理好后重新运行即可。模型改名时可以加 `--model <新名字>`。
 
 # 三、自动监控（启用时需要）
 
@@ -147,7 +173,7 @@ Web App 设置为"以部署者身份执行、任何人可访问"。本机发来�
 bin/uci setup secret create
 ```
 
-在本机生成一个随机密钥，存进 macOS 钥匙串（服务名 `UCI Queue API HMAC`），不会显示在屏幕上。
+在本机生成一个随机密钥，存进 macOS 钥匙串或 Windows 凭据管理器（名称 `UCI Queue API HMAC`），不会显示在屏幕上。
 
 ## 第 5 步：粘贴密钥、运行 uciSetup 并授权【本人】
 
@@ -174,7 +200,7 @@ bin/uci setup secret create
 
 完成后重新运行 `bin/uci setup`。如果核对失败，向导会说明原因：
 
-- 签名校验没通过：密钥没粘贴，或粘贴的值与本机钥匙串里的不一致。
+- 签名校验没通过：密钥没粘贴，或粘贴的值与本机钥匙串（Windows 凭据管理器）里的不一致。
 - 云端返回了网页：通常是还没完成授权。
 
 ## 第 6 步（可选，推荐）：Gemini 语义判断与发布文案【本人申请 Key，Agent 开启】
@@ -267,7 +293,7 @@ bin/uci setup confirm preferences
 bin/uci setup launchagent install
 ```
 
-安装三个 LaunchAgent，都使用当前运行向导的 Python：
+安装三个后台程序，都使用当前运行向导的 Python。Mac 上是 LaunchAgent；Windows 上是“任务计划程序”里“Universal Content Intake”文件夹下的 `worker`、`ytdlp-update`、`engine-check`，处理程序在登录 Windows 时启动，出错退出后 30 秒自动重启：
 
 - `local.universal-content-intake.worker`：常驻的处理程序。
 - `local.universal-content-intake.ytdlp-update`：每周自动更新 yt-dlp。
@@ -275,9 +301,9 @@ bin/uci setup launchagent install
 
 关闭自动监控时只停掉处理程序，后两个定时任务保留。
 
-日志在 `~/Library/Logs/Universal Content Intake/`。卸载：`bin/uci setup launchagent uninstall`。
+日志在 `~/Library/Logs/Universal Content Intake/`（Windows：`%LOCALAPPDATA%\Universal Content Intake\Logs\`）。卸载：`bin/uci setup launchagent uninstall`，会先停掉正在运行的处理程序和它启动的下载。
 
-## 第 10 步：macOS 权限【本人】
+## 第 10 步：macOS 权限【本人】（只有 Mac 需要）
 
 - 后台程序第一次写入"下载""桌面""文稿"里的文件夹时，macOS 会询问是否允许 Python 访问，点"允许"。
 - 在"系统设置 → 通知"里允许"脚本编辑器"发送通知（用于完成和失败提醒）。

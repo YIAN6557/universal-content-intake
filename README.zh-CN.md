@@ -2,17 +2,29 @@
 
 [English](README.md)
 
-Universal Content Intake 是一套运行在 Mac 上的资料下载工具：**给它一个链接，就能把里面的视频、文档、图片、文章或整个网页下载下来**，并整理好放进"下载"文件夹。
+Universal Content Intake 是一套资料下载工具，Mac 和 Windows 都能用：**给它一个链接，就能把里面的视频、文档、图片、文章或整个网页下载下来**，并整理好放进"下载"文件夹。
 
 在这个基础上，它还提供一项可选的配套功能：**自动监控**。指定一批 YouTube 作者后，系统会自动发现他们正在起量的新视频，自动下载、翻译并压制中文字幕，附上视频信息和发布文案。用不用这项功能，由你在第一次运行时决定。
 
 ## 快速开始
+
+Mac（终端）：
 
 ```bash
 git clone https://github.com/YIAN6557/universal-content-intake.git
 cd universal-content-intake
 bin/uci https://example.com/report.pdf
 ```
+
+Windows（命令提示符或 PowerShell；先装好 Python 3.11+ 和 Git，例如运行 `winget install Python.Python.3.13 Git.Git`）：
+
+```bat
+git clone https://github.com/YIAN6557/universal-content-intake.git
+cd universal-content-intake
+bin\uci https://example.com/report.pdf
+```
+
+下面所有用法两边都一样。示例里写的是 `bin/uci`，在 Windows 上输入 `bin\uci`（PowerShell 里写 `bin/uci` 也可以）。
 
 第一次运行时，系统会先问两个问题：
 
@@ -47,6 +59,24 @@ bin/uci "下载这个视频 https://www.youtube.com/watch?v=…"
 - **yt-dlp 每周自动更新**：更新后真实试一次，新版本出问题就自动退回旧版本。
 - **其他引擎每两周检查一次**：gallery-dl、gdown、trafilatura、SingleFile、rclone、aria2、deno，以及翻译压制用的 whisper.cpp。和各自 GitHub 上的最新正式版本对比，有新版本时发一条系统通知，**只提醒，不自动安装**。通知里的更新命令都是一条；whisper.cpp 的升级会先用测试录音自检，通过才替换。
 
+这两个定时任务在 Mac 上是 LaunchAgent，在 Windows 上是“任务计划程序”里“Universal Content Intake”文件夹下的任务。
+
+### 中文字幕由谁翻译
+
+语音识别（whisper.cpp）始终在本机完成。翻译：
+
+- **Mac**：默认用系统自带的 Apple 翻译，在本机完成，免费。也可以改用在线模型。
+- **Windows**：用在线模型（Windows 没有系统自带的翻译）。可选两个：**DeepSeek**（默认，很便宜）和**通义千问**（阿里云百炼，新用户有免费额度）。
+
+打开翻译压制后，系统会问你要不要接入模型，一步步告诉你怎么申请 API Key，先用一句话试翻译，成功后把 Key 存进钥匙串或 Windows 凭据管理器。以后随时可以改：
+
+```bash
+bin/uci setup translation use deepseek   # 或 qwen；会告诉你怎么申请 Key
+bin/uci setup translation key            # 粘贴 Key（屏幕上不显示），先试翻译，成功才保存
+bin/uci setup translation test           # 用已保存的 Key 试翻一句
+bin/uci setup translation apple          # Mac：改回 Apple 翻译
+```
+
 ```bash
 bin/uci engines    # 现在就检查一次，列出每个引擎的版本和更新命令
 bin/uci status     # 查看上一次检查的结果
@@ -57,7 +87,7 @@ bin/uci status     # 查看上一次检查的结果
 ```
 作者白名单 ─► 定时发现新视频 ─► 跟踪早期播放数据 ─► 规则筛选 + 可选的 AI 内容判断 ─► 每日选片
                                                                                           │
-交付文件夹 ◄─ 字幕压制 ◄─ 本机翻译 ◄─ 字幕获取 / 本机语音识别 ◄─ Mac 后台下载 ◄──────────┘
+交付文件夹 ◄─ 字幕压制 ◄─ 翻译 ◄─ 字幕获取 / 本机语音识别 ◄─ 本机后台下载 ◄────────────────┘
 ```
 
 - **云端（Google Apps Script + 一张 Google 表格）**：
@@ -65,7 +95,7 @@ bin/uci status     # 查看上一次检查的结果
   - 和该作者自己的历史表现比较，找出正在起量的视频；
   - 按时长、标题规则过滤；接入 Gemini 后，还会按你写的内容方向判断是否合适；
   - 每天在设定时间选出 1–2 条，交给本机处理。
-- **你的 Mac（后台程序）**：领取任务后下载视频，翻译并压制中文字幕，连同发布信息（标题、文案、话题标签、来源）一起放进交付文件夹。
+- **你的电脑（后台程序）**：领取任务后下载视频，翻译并压制中文字幕，连同发布信息（标题、文案、话题标签、来源）一起放进交付文件夹。
 
 开启和关闭：
 
@@ -81,11 +111,12 @@ bin/uci status                       # 查看自动监控的运行情况，以�
 
 | 功能 | 需要 |
 |---|---|
-| 下载（所有人） | macOS 15 或更新（建议 Apple 芯片）、Python 3.11+、ffmpeg、yt-dlp、deno；图片、整页网页、云盘链接分别还要 gallery-dl、SingleFile 加 Chrome、rclone |
-| 翻译压制（选"启用"或"每次询问"时） | Xcode 命令行工具；配置向导会下载约 490 MB 的 Whisper 语音识别模型、编译翻译小工具；Apple 翻译语言包（英→简中） |
+| 下载（所有人） | macOS 15 或更新（建议 Apple 芯片），或 Windows 10（1809 及以后）/ 11；Python 3.11+、ffmpeg、yt-dlp、deno；图片、整页网页、云盘链接分别还要 gallery-dl、SingleFile 加 Chrome、rclone |
+| 翻译压制 · Mac（选"启用"或"每次询问"时） | Xcode 命令行工具；配置向导会下载约 490 MB 的 Whisper 语音识别模型、编译 whisper.cpp 和翻译小工具；Apple 翻译语言包（英→简中），或者一个 DeepSeek / 通义千问的 API Key |
+| 翻译压制 · Windows（选"启用"或"每次询问"时） | 配置向导会下载约 490 MB 的 Whisper 语音识别模型和 whisper.cpp 官方的 Windows 版；一个 DeepSeek 或通义千问的 API Key |
 | 自动监控（启用时） | 以上全部，加一个 Google 账号和 Node.js（用来安装 clasp）；推荐一个免费的 Gemini API Key |
 
-缺什么，`bin/uci setup doctor` 会列出来并给出安装命令；用不到的功能所需的工具会标注出来，不用装。
+缺什么，`bin/uci setup doctor` 会列出来并给出安装命令（Mac 用 Homebrew，Windows 用 winget）；用不到的功能所需的工具会标注出来，不用装。
 
 ## 配置与向导
 
@@ -106,7 +137,7 @@ bin/uci setup verify      # 验收：试下载一次，确认可用
 | `~/.config/universal-content-intake/config.yaml` | 两个选择（`features.monitoring`、`features.video_subtitles`），以及下载文件夹、交付文件夹、工作文件夹、画质（默认 1080p）、是否允许使用 Chrome 登录状态（默认关）、云端接口地址 |
 | Google 表格 → `Config`（自动监控；用 `bin/uci setup config set key=value` 修改） | 时区、发现时段、补扫和选片时间、每天数量、第 2 条最晚开始处理的时间、播放数据门槛、时长上限、标题过滤规则、Gemini 判断和内容方向 |
 | Google 表格 → `Creators`（自动监控；用 `bin/uci setup creators …` 修改） | 作者白名单 |
-| macOS 钥匙串 | 本机与云端的共享密钥，可选的 Gemini / Anthropic Key（写发布文案用） |
+| macOS 钥匙串 / Windows 凭据管理器 | 本机与云端的共享密钥；字幕翻译用的 DeepSeek / 通义千问 Key；可选的 Gemini / Anthropic Key（写发布文案用，`bin/uci setup apikey gemini`） |
 | Apps Script → 脚本属性 | 同一个共享密钥，可选的 `UCI_GEMINI_API_KEY` |
 
 你的作者名单和内容方向只保存在你自己的 Google 表格和本机配置里，不会进入本仓库。
@@ -114,8 +145,8 @@ bin/uci setup verify      # 验收：试下载一次，确认可用
 ## 隐私与安全
 
 - 下载默认匿名进行。只有你开启 `video.allow_browser_cookies`，遇到需要登录才能观看的视频时，才会使用 Chrome 的登录状态。
-- 语音识别和翻译都在本机完成。可选的 Gemini 判断会把视频标题、简介和统计数据发送给 Google；可选的发布文案生成还会发送翻译后的字幕片段。
-- 自动监控时，本机与云端之间的每个请求都经过 HMAC-SHA256 签名，密钥只保存在你的钥匙串和脚本属性中，向导不会显示它。
+- 语音识别在本机完成，Mac 上的 Apple 翻译也在本机完成。用在线模型翻译时（Windows 上总是如此），字幕文字会发送给 DeepSeek 或通义千问。可选的 Gemini 判断会把视频标题、简介和统计数据发送给 Google；可选的发布文案生成还会发送翻译后的字幕片段。
+- 自动监控时，本机与云端之间的每个请求都经过 HMAC-SHA256 签名，密钥只保存在你的钥匙串（或 Windows 凭据管理器）和脚本属性中，向导不会显示它。
 
 ## 合规使用
 
@@ -127,6 +158,8 @@ bin/uci setup verify      # 验收：试下载一次，确认可用
 python3 -m unittest discover -s tests   # Python 测试
 node --test tests/*.js                  # Apps Script 测试（在 Node 虚拟机里运行）
 ```
+
+GitHub Actions 会在 Mac 和 Windows 上都跑 Python 测试，并在 Windows 上实际下载、完整跑一次字幕流程、测试后台任务（`.github/workflows/tests.yml`）。两个系统之间的差异集中在 `src/core/compat.py`。
 
 各阶段的命令行工具和模块分工见 [docs/REFERENCE.md](docs/REFERENCE.md)。
 
